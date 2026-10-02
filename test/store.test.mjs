@@ -26,8 +26,8 @@ test('a chance game can be played once per visitor and the stock goes down', () 
 });
 
 test('a prize with no stock left is never drawn', () => {
-  store.state.prizes.forEach((prize) => store.updatePrize(prize.id, { stock: prize.id === 'cap' ? 5 : 0 }));
-  for (let draw = 0; draw < 5; draw++) assert.equal(store.drawPrize('scratch').id, 'cap');
+  store.state.prizes.forEach((prize) => store.updatePrize(prize.id, { stock: prize.id === 'tape' ? 5 : 0 }));
+  for (let draw = 0; draw < 5; draw++) assert.equal(store.drawPrize('scratch').id, 'tape');
   // Nothing left: the games fall back to a single empty slot instead of crashing.
   assert.deepEqual(
     store.availablePrizes().map((prize) => prize.id),
@@ -49,4 +49,15 @@ test('phone and digit helpers', { skip: !normalizePhone }, () => {
   assert.equal(normalizePhone('12345'), null);
   assert.equal(fa(1234567), '۱٬۲۳۴٬۵۶۷');
   assert.equal(toLatinDigits('٣۴'), '34');
+});
+
+test('a new CONFIG_VERSION replaces saved prizes and stations but keeps visitors', async () => {
+  const saved = JSON.parse(memory.get('zanis-games-v1'));
+  saved.configVersion = 0;
+  saved.prizes = [{ id: 'old', label: 'old prize', short: 'old', color: '#000', weight: 1, stock: 3 }];
+  memory.set('zanis-games-v1', JSON.stringify(saved));
+  const { store: reloaded } = await import('../web/js/core/store.js?reload=1');
+  assert.ok(reloaded.state.prizes.some((prize) => prize.id === 'bulb12'));
+  assert.ok(!reloaded.state.prizes.some((prize) => prize.id === 'old'));
+  assert.ok(reloaded.state.players['09121234567'], 'visitors survive the config update');
 });

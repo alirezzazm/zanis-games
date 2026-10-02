@@ -29,7 +29,7 @@ export default {
         'button.mcard',
         { 'aria-label': 'کارت بسته', onclick: () => flip(index) },
         h('div.face.back', { html: BRAND_MARK }),
-        h('div.face.front', h('div', { html: product.icon }), h('span', product.name)),
+        h('div.face.front', h('img', { src: product.image, alt: '', draggable: false }), h('span', product.name)),
       ),
     );
     stage.append(h('div.memory', cards));

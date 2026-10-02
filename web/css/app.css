@@ -492,14 +492,24 @@ canvas {
   transform: rotateY(180deg);
   padding: 6px;
   text-align: center;
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.45;
   align-content: center;
   gap: 4px;
 }
-.mcard .front svg {
-  width: 58%;
+.mcard .front img {
+  width: 78%;
+  aspect-ratio: 1;
+  object-fit: contain;
   margin: 0 auto;
+  border-radius: 10px;
+  background: #fff;
+}
+.mcard .front span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .mcard.done .front {
   border-color: var(--green);

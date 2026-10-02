@@ -1,13 +1,14 @@
 // Booth data kept on the device (localStorage): visitors, best scores, prize stock, settings.
 // There is no server: the operator exports the visitor list as CSV from the operator panel.
 
-import { DEFAULT_PRIZES, DEFAULT_STATIONS } from '../data/config.js';
+import { CONFIG_VERSION, DEFAULT_PRIZES, DEFAULT_STATIONS } from '../data/config.js';
 
 const KEY = 'zanis-games-v1';
 const NO_PRIZE = { id: 'none', label: 'پوچ', short: 'پوچ', color: '#39446f', weight: 1, stock: -1, empty: true };
 
 const initialState = () => ({
   version: 1,
+  configVersion: CONFIG_VERSION,
   players: {}, // phone -> { name, phone, createdAt, scores: { [gameId]: best }, prizes: [{ gameId, label, at }], stamps: [], plays: {} }
   currentPhone: null,
   prizes: DEFAULT_PRIZES.map((prize) => ({ ...prize })),
@@ -22,7 +23,14 @@ function load() {
     const saved = JSON.parse(raw);
     const fresh = initialState();
     // Shallow-merge so fields added in newer versions get their defaults.
-    return { ...fresh, ...saved, settings: { ...fresh.settings, ...saved.settings } };
+    const merged = { ...fresh, ...saved, settings: { ...fresh.settings, ...saved.settings } };
+    if (saved.configVersion !== CONFIG_VERSION) {
+      // The booth configuration shipped with the app changed: take the new prizes and stations.
+      merged.prizes = fresh.prizes;
+      merged.stations = fresh.stations;
+      merged.configVersion = CONFIG_VERSION;
+    }
+    return merged;
   } catch {
     return initialState();
   }
