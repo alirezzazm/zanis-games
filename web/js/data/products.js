@@ -27,7 +27,18 @@ export const PRODUCTS = [
   { id: 'waterproof-25w', name: 'چراغ روکار ضدآب 25 وات', family: 'ضدآب', image: 'img/products/waterproof-25w.webp' },
   { id: 'connector-sp2', name: 'کانکتور SP-2', family: 'لوازم جانبی', image: 'img/products/connector-sp2.webp' },
   { id: 'remote-relay-1', name: 'ریسیور و ریموت تک رله', family: 'لوازم جانبی', image: 'img/products/remote-relay-1.webp' },
+  { id: 'projector-starlens-50w', name: 'پروژکتور استارلنز 50 وات', family: 'پروژکتور', image: 'img/products/projector-starlens-50w.webp' },
+  { id: 'tape', name: 'چسب برق', family: 'لوازم جانبی', image: 'img/products/tape.webp' },
 ];
+
+export const productById = (id) => PRODUCTS.find((product) => product.id === id) ?? null;
+
+/** Photo of the product a prize (or passport station) stands for; undefined for non-product prizes. */
+export const prizeImage = (item) => productById(item?.productId)?.image;
+
+/** Products that give light: used where a game needs "a lamp" (circuit, photo frame). */
+const LIGHT_FAMILIES = ['لامپ', 'هالوژن', 'پنل گرد', 'پنل مربع', 'پروژکتور', 'براکت', 'دکوراتیو'];
+export const LIGHT_PRODUCTS = PRODUCTS.filter((product) => LIGHT_FAMILIES.includes(product.family));
 
 const svg = (body) =>
   `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;

@@ -1,23 +1,47 @@
-// Lighting quiz: 8 random questions, 15 seconds each; faster correct answers score more.
+// Lighting quiz: 8 questions, 15 seconds each; faster correct answers score more.
+// Five come from the question bank and three are "which product is this?" picture questions.
 
 import { h, shuffle, fa, host } from '../core/util.js';
 import { sfx } from '../core/audio.js';
+import { PRODUCTS } from '../data/products.js';
 import { QUESTIONS } from '../data/quiz.js';
 
 const QUESTION_COUNT = 8;
+const PICTURE_QUESTIONS = 3;
 const SECONDS_PER_QUESTION = 15;
 const BASE_POINTS = 6;
 const SPEED_BONUS = 6;
 
+/** Builds picture questions: a product photo and four product names, one of them correct. */
+export function pictureQuestions(count, products = PRODUCTS) {
+  return shuffle(products)
+    .slice(0, count)
+    .map((product) => {
+      // Wrong options come from other families first, so two near-identical names never compete.
+      const others = shuffle(products.filter((candidate) => candidate.family !== product.family)).slice(0, 3);
+      const options = shuffle([product, ...others]);
+      return {
+        image: product.image,
+        q: 'این محصول زانیس کدام است؟',
+        options: options.map((option) => option.name),
+        answer: options.indexOf(product),
+        note: `${product.name} از خانوادهٔ «${product.family}» زانیس است.`,
+      };
+    });
+}
+
 export default {
   id: 'quiz',
   title: 'مسابقهٔ روشنایی',
-  blurb: '۸ سؤال دربارهٔ نور و محصولات؛ سریع‌تر، امتیاز بیشتر',
+  blurb: '۸ سؤال دربارهٔ نور و محصولات زانیس؛ سریع‌تر، امتیاز بیشتر',
   emoji: '🧠',
   category: 'مسابقهٔ اطلاعات',
   kind: 'score',
   mount(stage, api) {
-    const questions = shuffle(QUESTIONS).slice(0, QUESTION_COUNT);
+    const questions = shuffle([
+      ...shuffle(QUESTIONS).slice(0, QUESTION_COUNT - PICTURE_QUESTIONS),
+      ...pictureQuestions(PICTURE_QUESTIONS),
+    ]);
     let index = 0;
     let score = 0;
     let correct = 0;
@@ -44,7 +68,13 @@ export default {
       const buttons = item.options.map((option, optionIndex) =>
         h('button.answer', { onclick: () => answer(optionIndex) }, option),
       );
-      wrap.replaceChildren(h('div.progress', bar), h('p.question', item.q), h('div.answers', buttons), note);
+      wrap.replaceChildren(
+        h('div.progress', bar),
+        item.image ? h('img.question-photo', { src: item.image, alt: '', draggable: false }) : null,
+        h('p.question', item.q),
+        h('div.answers', buttons),
+        note,
+      );
       updateHud(SECONDS_PER_QUESTION);
 
       timer = setInterval(() => {

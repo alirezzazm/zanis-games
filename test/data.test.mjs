@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { test } from 'node:test';
 import { DEFAULT_PRIZES, DEFAULT_STATIONS } from '../web/js/data/config.js';
-import { PRODUCTS } from '../web/js/data/products.js';
+import { PRODUCTS, productById } from '../web/js/data/products.js';
 import { QUESTIONS } from '../web/js/data/quiz.js';
 
 test('every product has a unique id and an image file', () => {
@@ -27,4 +27,8 @@ test('prizes and stations are consistent', () => {
   assert.equal(new Set(DEFAULT_PRIZES.map((prize) => prize.id)).size, DEFAULT_PRIZES.length);
   assert.ok(DEFAULT_PRIZES.some((prize) => prize.empty && prize.stock === -1), 'an unlimited empty slot must exist');
   assert.equal(new Set(DEFAULT_STATIONS.map((station) => station.code)).size, DEFAULT_STATIONS.length);
+  for (const item of [...DEFAULT_PRIZES, ...DEFAULT_STATIONS]) {
+    if (item.productId) assert.ok(productById(item.productId), `unknown product ${item.productId}`);
+  }
+  assert.ok(DEFAULT_STATIONS.every((station) => station.productId), 'every station shows a product');
 });

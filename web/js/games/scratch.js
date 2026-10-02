@@ -1,8 +1,11 @@
 // Scratch card: the prize is drawn up-front and revealed when enough of the foil is scratched off.
+// Product prizes show the product photo under the foil.
 
 import { h, setupCanvas, host } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { store } from '../core/store.js';
+import { prizeImage } from '../data/products.js';
+import { prizeResult, PRACTICE_HINT } from './prize.js';
 
 const REVEAL_RATIO = 0.55;
 const BRUSH = 26;
@@ -10,14 +13,16 @@ const BRUSH = 26;
 export default {
   id: 'scratch',
   title: 'کارت خراشی',
-  blurb: 'روی کارت بکش و جایزه را پیدا کن',
+  blurb: 'روی کارت بکش و محصول زیر آن را پیدا کن',
   emoji: '🎟️',
   category: 'شانسی',
   kind: 'chance',
   mount(stage, api) {
     const width = Math.min(stage.clientWidth || 340, 400);
-    const height = Math.round(width * 0.62);
-    const prize = store.drawPrize('scratch');
+    const height = Math.round(width * 0.72);
+    const practice = !store.hasPrizeRound('scratch');
+    const prize = store.drawPrize('scratch', { practice });
+    const photo = prizeImage(prize);
 
     const face = h(
       'div.card.center',
@@ -31,7 +36,13 @@ export default {
           color: prize.empty ? '#c9d2f5' : '#1a1300',
         },
       },
-      h('div', h('div', { style: { fontSize: '44px' } }, prize.empty ? '🙈' : '🎁'), h('b', { style: { fontSize: '22px' } }, prize.label)),
+      h(
+        'div',
+        photo
+          ? h('img.prize-photo', { src: photo, alt: '', draggable: false })
+          : h('div', { style: { fontSize: '44px' } }, prize.empty ? '🙈' : '🎁'),
+        h('b', { style: { fontSize: '20px', display: 'block', marginTop: '6px' } }, prize.label),
+      ),
     );
     const canvas = h('canvas', { style: { position: 'absolute', inset: '0', borderRadius: '18px' } });
     const context = setupCanvas(canvas, width, height);
@@ -53,6 +64,7 @@ export default {
 
     let revealed = false;
     let last = null;
+    let finishTimer = 0;
 
     function scratch(event) {
       if (revealed) return;
@@ -82,17 +94,7 @@ export default {
       canvas.style.transition = 'opacity .4s';
       canvas.style.opacity = '0';
       host.vibrate(60);
-      setTimeout(
-        () =>
-          api.finish({
-            score: prize.empty ? 0 : 50,
-            emoji: prize.empty ? '🙈' : '🎁',
-            title: prize.empty ? 'این بار پوچ!' : prize.label,
-            detail: prize.empty ? 'شانست را در بازی‌های دیگر امتحان کن.' : 'جایزه‌ات را از مسئول غرفه بگیر.',
-            win: !prize.empty,
-          }),
-        700,
-      );
+      finishTimer = setTimeout(() => api.finish(prizeResult(prize, practice)), 700);
     }
     canvas.addEventListener('pointerdown', (event) => {
       sfx.tap();
@@ -101,7 +103,7 @@ export default {
     canvas.addEventListener('pointermove', (event) => event.buttons && scratch(event));
     canvas.addEventListener('pointerup', check);
     canvas.addEventListener('pointerleave', check);
-    api.setHint('با انگشت روی کارت بکش.');
-    return () => {};
+    api.setHint(practice ? PRACTICE_HINT : 'با انگشت روی کارت بکش.');
+    return () => clearTimeout(finishTimer);
   },
 };

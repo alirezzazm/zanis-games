@@ -16,13 +16,23 @@ test('keeps the best score per game and totals them', () => {
   assert.equal(store.leaderboard()[0].score, 120);
 });
 
-test('a chance game can be played once per visitor and the stock goes down', () => {
-  assert.equal(store.canPlayChance('wheel'), true);
+test('one prize round per chance game; later rounds are practice and leave the stock alone', () => {
+  assert.equal(store.hasPrizeRound('wheel'), true);
   const before = store.state.prizes.map((prize) => prize.stock);
   const prize = store.drawPrize('wheel');
-  assert.equal(store.canPlayChance('wheel'), false);
+  assert.equal(store.hasPrizeRound('wheel'), false);
   const index = store.state.prizes.findIndex((candidate) => candidate.id === prize.id);
   assert.equal(store.state.prizes[index].stock, before[index] > 0 ? before[index] - 1 : before[index]);
+
+  const stockAfterPrizeRound = store.state.prizes.map((candidate) => candidate.stock);
+  const prizesWon = store.currentPlayer().prizes.length;
+  for (let round = 0; round < 20; round++) store.drawPrize('wheel', { practice: true });
+  assert.deepEqual(store.state.prizes.map((candidate) => candidate.stock), stockAfterPrizeRound);
+  assert.equal(store.currentPlayer().prizes.length, prizesWon);
+
+  store.updateSettings({ prizeRoundsPerVisitor: 0 });
+  assert.equal(store.hasPrizeRound('wheel'), true, '0 means unlimited prize rounds');
+  store.updateSettings({ prizeRoundsPerVisitor: 1 });
 });
 
 test('a prize with no stock left is never drawn', () => {

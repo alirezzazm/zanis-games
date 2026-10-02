@@ -330,6 +330,25 @@ canvas {
   line-height: 1.8;
 }
 
+.prize-photo,
+.result-photo,
+.question-photo {
+  width: 132px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 18px;
+  background: #fff;
+  margin: 0 auto;
+  display: block;
+}
+.prize-photo {
+  width: 104px;
+}
+.question-photo {
+  width: 150px;
+  border: 2px solid var(--line);
+}
+
 /* result overlay */
 .overlay {
   position: fixed;
@@ -398,8 +417,17 @@ canvas {
   display: grid;
   place-items: center;
   font-size: 34px;
-  filter: grayscale(1) brightness(0.55);
+  padding: 0;
+  filter: grayscale(1) brightness(0.45);
   transition: all 0.08s;
+}
+.lamp img {
+  width: 76%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #fff;
+  pointer-events: none;
 }
 .lamp.on {
   background: radial-gradient(circle at 50% 40%, #fff3c4, var(--gold) 55%, var(--gold-2));
@@ -566,6 +594,27 @@ canvas {
   filter: drop-shadow(0 0 6px #ffc21a);
 }
 
+.circuit-side {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  font-size: 26px;
+  width: 54px;
+}
+.circuit-lamp {
+  width: 52px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+  filter: grayscale(1) brightness(0.6);
+  transition: all 0.4s;
+}
+.circuit-lamp.lit {
+  filter: none;
+  box-shadow: 0 0 26px #ffc21a;
+}
+
 .stamps {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -579,6 +628,17 @@ canvas {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.7;
+}
+.stamp img {
+  width: 64px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+  filter: grayscale(1) opacity(0.55);
+}
+.stamp.got img {
+  filter: none;
 }
 .stamp .emoji {
   font-size: 30px;

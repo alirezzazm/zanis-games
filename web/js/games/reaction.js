@@ -1,7 +1,8 @@
-// Reaction game: lamps light up at random; tap the yellow ones fast, avoid the red (faulty) ones.
+// Reaction game: Zanis products light up at random; tap the lit ones fast, avoid the red (faulty) ones.
 
-import { h, randomInt, host, fa } from '../core/util.js';
+import { h, randomInt, shuffle, host, fa } from '../core/util.js';
 import { sfx } from '../core/audio.js';
+import { PRODUCTS } from '../data/products.js';
 
 const ROUND_SECONDS = 30;
 const LAMPS = 16;
@@ -10,7 +11,7 @@ const FAULTY_CHANCE = 0.18;
 export default {
   id: 'reaction',
   title: 'چراغ‌ها را بگیر',
-  blurb: 'در ۳۰ ثانیه هرچه می‌توانی لامپ روشن را لمس کن',
+  blurb: 'در ۳۰ ثانیه هر محصولی که روشن شد را لمس کن',
   emoji: '⚡',
   category: 'مهارتی',
   kind: 'score',
@@ -22,8 +23,14 @@ export default {
     let clock = 0;
     let litIndex = -1;
 
-    const lamps = Array.from({ length: LAMPS }, (_, index) =>
-      h('button.lamp', { 'aria-label': `لامپ ${index + 1}`, onpointerdown: () => hit(index) }, '💡'),
+    // Each cell holds one product; a different set every round.
+    const products = shuffle(PRODUCTS).slice(0, LAMPS);
+    const lamps = products.map((product, index) =>
+      h(
+        'button.lamp',
+        { 'aria-label': product.name, onpointerdown: () => hit(index) },
+        h('img', { src: product.image, alt: '', draggable: false }),
+      ),
     );
     const start = h('button.btn.block', { onclick: begin }, 'شروع');
     stage.append(h('div.stack', { style: { alignItems: 'center', width: '100%' } }, h('div.lamps', lamps), start));
@@ -40,10 +47,11 @@ export default {
       litIndex = -1;
     }
     function lightNext() {
+      const previous = litIndex;
       clearLit();
       if (!running) return;
       let next = randomInt(0, LAMPS - 1);
-      if (next === litIndex) next = (next + 1) % LAMPS;
+      if (next === previous) next = (next + 1) % LAMPS;
       litIndex = next;
       const faulty = Math.random() < FAULTY_CHANCE;
       lamps[next].classList.add('on');
@@ -85,7 +93,7 @@ export default {
           score,
           emoji: score >= 40 ? '🏆' : '⚡',
           title: `${fa(score)} امتیاز`,
-          detail: 'لامپ قرمز یعنی خراب؛ دست نزن!',
+          detail: 'قاب قرمز یعنی خراب؛ دست نزن!',
           win: score >= 20,
         });
       }, 1000);
@@ -96,7 +104,7 @@ export default {
       clearTimeout(litTimeout);
       clearLit();
     }
-    api.setHint('لامپ زرد +۲ · لامپ قرمز −۳ · لمس اشتباه −۱');
+    api.setHint('محصول روشن +۲ · قاب قرمز −۳ · لمس اشتباه −۱');
     return stop;
   },
 };

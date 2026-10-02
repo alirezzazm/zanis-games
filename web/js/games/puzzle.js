@@ -1,100 +1,86 @@
-// Swap puzzle: a 3×3 poster is shuffled; tap two pieces to swap them until the picture is whole.
+// Swap puzzle: a poster of one Zanis product is cut into 3×3 pieces and shuffled;
+// tap two pieces to swap them until the picture is whole. A different product every round.
 
-import { h, shuffle, fa, host } from '../core/util.js';
+import { h, shuffle, fa, host, loadImage, randomInt } from '../core/util.js';
 import { sfx } from '../core/audio.js';
+import { PRODUCTS } from '../data/products.js';
 
 const SIZE = 3;
 const MAX_SCORE = 100;
 const POSTER_PX = 600;
 
-/** Draws the poster the puzzle is cut from: a night street lit by a Zanis street light. */
-function drawPoster() {
+/**
+ * Draws the poster the puzzle is cut from: the product photo on a lit background, with the brand
+ * above and the product name below. The diagonal light rays make every piece distinguishable,
+ * including the ones that only show background.
+ */
+function drawPoster(product, photo) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = POSTER_PX;
   const c = canvas.getContext('2d');
-  const sky = c.createLinearGradient(0, 0, 0, POSTER_PX);
-  sky.addColorStop(0, '#0b1020');
-  sky.addColorStop(1, '#2a3a7a');
-  c.fillStyle = sky;
+  const background = c.createLinearGradient(0, 0, POSTER_PX, POSTER_PX);
+  background.addColorStop(0, '#ffc21a');
+  background.addColorStop(0.45, '#ff9d0a');
+  background.addColorStop(1, '#1a2a6c');
+  c.fillStyle = background;
   c.fillRect(0, 0, POSTER_PX, POSTER_PX);
-  // Stars
-  c.fillStyle = '#ffffffcc';
-  for (let i = 0; i < 40; i++) c.fillRect((i * 97) % POSTER_PX, (i * 53) % 260, 3, 3);
-  // Buildings with lit windows
-  const buildings = [
-    [20, 300, 130, 300, '#151d38'],
-    [170, 240, 110, 360, '#1a2444'],
-    [300, 330, 150, 270, '#151d38'],
-    [470, 270, 120, 330, '#1a2444'],
-  ];
-  buildings.forEach(([x, y, w, hgt, color], b) => {
-    c.fillStyle = color;
-    c.fillRect(x, y, w, hgt);
-    for (let row = 0; row < 5; row++)
-      for (let col = 0; col < 3; col++) {
-        c.fillStyle = (row + col + b) % 3 === 0 ? '#ffc21a' : '#2b3766';
-        c.fillRect(x + 14 + col * (w / 3.4), y + 18 + row * 44, w / 6, 22);
-      }
-  });
-  // Street light and its beam
-  const beam = c.createRadialGradient(430, 190, 10, 430, 420, 320);
-  beam.addColorStop(0, '#ffe9a6cc');
-  beam.addColorStop(1, '#ffc21a00');
-  c.fillStyle = beam;
+  c.strokeStyle = '#ffffff40';
+  c.lineWidth = 16;
+  for (let ray = -6; ray < 14; ray++) {
+    c.beginPath();
+    c.moveTo(ray * 70, 0);
+    c.lineTo(ray * 70 - 260, POSTER_PX);
+    c.stroke();
+  }
+  // Product photo on a white rounded card
+  const card = 360;
+  const cardX = (POSTER_PX - card) / 2;
+  const cardY = 120;
+  c.fillStyle = '#fff';
   c.beginPath();
-  c.moveTo(430, 190);
-  c.lineTo(250, 600);
-  c.lineTo(600, 600);
-  c.closePath();
+  c.roundRect(cardX, cardY, card, card, 32);
   c.fill();
-  c.strokeStyle = '#dfe6ff';
-  c.lineWidth = 12;
-  c.lineCap = 'round';
+  c.drawImage(photo, cardX + 14, cardY + 14, card - 28, card - 28);
+  c.strokeStyle = '#0b1020';
+  c.lineWidth = 8;
   c.beginPath();
-  c.moveTo(540, 600);
-  c.lineTo(540, 190);
-  c.quadraticCurveTo(540, 150, 470, 160);
+  c.roundRect(cardX, cardY, card, card, 32);
   c.stroke();
-  c.fillStyle = '#ffc21a';
-  c.fillRect(400, 160, 80, 26);
-  // Road and brand
-  c.fillStyle = '#0e1530';
-  c.fillRect(0, 540, POSTER_PX, 60);
-  c.fillStyle = '#ffc21a';
-  c.font = '900 92px Vazirmatn, sans-serif';
+  // Brand and product name
   c.direction = 'rtl';
-  c.textAlign = 'right';
-  c.fillText('زانیس', 560, 110);
-  c.fillStyle = '#dfe6ff';
-  c.font = '700 30px Vazirmatn, sans-serif';
-  c.fillText('روشنایی شهر', 560, 150);
+  c.textAlign = 'center';
+  c.fillStyle = '#0b1020';
+  c.font = '900 76px Vazirmatn, sans-serif';
+  c.fillText('زانیس', POSTER_PX / 2, 86);
+  c.fillStyle = '#fff';
+  c.font = '700 34px Vazirmatn, sans-serif';
+  c.fillText(product.name, POSTER_PX / 2, 548, POSTER_PX - 40);
   return canvas.toDataURL('image/jpeg', 0.85);
 }
 
 export default {
   id: 'puzzle',
-  title: 'پازل نور',
-  blurb: 'تکه‌ها را جابه‌جا کن تا تصویر کامل شود',
+  title: 'پازل محصول',
+  blurb: 'تکه‌ها را جابه‌جا کن تا عکس محصول کامل شود',
   emoji: '🧩',
   category: 'دیجیتال',
   kind: 'score',
   mount(stage, api) {
-    const poster = drawPoster();
+    const product = PRODUCTS[randomInt(0, PRODUCTS.length - 1)];
     const total = SIZE * SIZE;
     const solved = Array.from({ length: total }, (_, index) => index);
     let order = shuffle(solved);
     // A shuffle can come out already solved; make sure the player has something to do.
     if (order.every((piece, slot) => piece === slot)) order = [...order.slice(1), order[0]];
+    let poster = '';
     let selected = -1;
     let moves = 0;
     let seconds = 0;
+    let clock = 0;
+    let disposed = false;
 
     const board = h('div.board', { style: { gridTemplateColumns: `repeat(${SIZE}, 1fr)` } });
     stage.append(board);
-    const clock = setInterval(() => {
-      seconds += 1;
-      updateHud();
-    }, 1000);
 
     function updateHud() {
       api.setHud([
@@ -107,8 +93,7 @@ export default {
         ...order.map((piece, slot) => {
           const column = piece % SIZE;
           const row = Math.floor(piece / SIZE);
-          return h('button.piece', {
-            class: slot === selected ? 'piece sel' : 'piece',
+          return h(`button.piece${slot === selected ? '.sel' : ''}`, {
             'aria-label': `تکهٔ ${slot + 1}`,
             style: {
               backgroundImage: `url(${poster})`,
@@ -143,16 +128,30 @@ export default {
           api.finish({
             score,
             emoji: '🧩',
+            image: product.image,
             title: `${fa(score)} امتیاز`,
-            detail: `${fa(moves)} جابه‌جایی در ${fa(seconds)} ثانیه`,
+            detail: `${product.name} · ${fa(moves)} جابه‌جایی در ${fa(seconds)} ثانیه`,
             win: true,
           }),
         500,
       );
     }
-    render();
+
     updateHud();
     api.setHint('دو تکه را پشت سر هم لمس کن تا جایشان عوض شود.');
-    return () => clearInterval(clock);
+    // The poster needs the product photo and the brand font; the clock starts once it is on screen.
+    Promise.all([loadImage(product.image), document.fonts?.ready]).catch(() => [null]).then(([photo]) => {
+      if (disposed || !photo) return;
+      poster = drawPoster(product, photo);
+      render();
+      clock = setInterval(() => {
+        seconds += 1;
+        updateHud();
+      }, 1000);
+    });
+    return () => {
+      disposed = true;
+      clearInterval(clock);
+    };
   },
 };

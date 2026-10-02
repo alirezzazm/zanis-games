@@ -1,15 +1,16 @@
 // Photo frame: selfie with a Zanis-branded frame. The photo is composed on a canvas and saved to
 // the device gallery (through the Android bridge) so the visitor can share it on social media.
 
-import { h, toast, host } from '../core/util.js';
+import { h, toast, host, loadImage, randomInt } from '../core/util.js';
 import { sfx } from '../core/audio.js';
+import { LIGHT_PRODUCTS } from '../data/products.js';
 
 const OUTPUT_WIDTH = 900;
 const OUTPUT_HEIGHT = 1200;
 const POINTS = 20;
 
-/** Draws the branded frame over whatever is already on the canvas. */
-function drawFrame(context, width, height) {
+/** Draws the branded frame (and, once loaded, the featured product badge) over the canvas. */
+function drawFrame(context, width, height, badge) {
   const border = width * 0.035;
   context.lineWidth = border;
   context.strokeStyle = '#ffc21a';
@@ -29,6 +30,25 @@ function drawFrame(context, width, height) {
   context.fillStyle = '#ffffff';
   context.font = `700 ${Math.round(width * 0.036)}px Vazirmatn, sans-serif`;
   context.fillText('من در غرفهٔ روشنایی زانیس بودم  #زانیس', width / 2, height - band * 0.18);
+  if (badge) {
+    // Featured product in a white disc, top-right corner.
+    const radius = width * 0.11;
+    const centerX = width - border - radius - width * 0.02;
+    const centerY = border + radius + width * 0.02;
+    context.save();
+    context.beginPath();
+    context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    context.fillStyle = '#fff';
+    context.fill();
+    context.clip();
+    context.drawImage(badge, centerX - radius * 0.82, centerY - radius * 0.82, radius * 1.64, radius * 1.64);
+    context.restore();
+    context.lineWidth = width * 0.008;
+    context.strokeStyle = '#ffc21a';
+    context.beginPath();
+    context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    context.stroke();
+  }
   // Light rays in the top corner
   context.strokeStyle = '#ffc21acc';
   context.lineWidth = width * 0.008;
@@ -56,6 +76,15 @@ export default {
     frame.width = OUTPUT_WIDTH;
     frame.height = OUTPUT_HEIGHT;
     drawFrame(frame.getContext('2d'), OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    // A different Zanis product is featured on the frame each time.
+    const product = LIGHT_PRODUCTS[randomInt(0, LIGHT_PRODUCTS.length - 1)];
+    let badge = null;
+    loadImage(product.image).then((image) => {
+      badge = image;
+      const overlay = frame.getContext('2d');
+      overlay.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+      drawFrame(overlay, OUTPUT_WIDTH, OUTPUT_HEIGHT, badge);
+    }).catch(() => {}); // without the photo the frame simply has no product badge
     const preview = h('div.photo-wrap', video, frame);
     const actions = h('div.row', { style: { width: '100%' } });
     stage.append(h('div.stack', { style: { alignItems: 'center', width: '100%' } }, preview, actions));
@@ -118,7 +147,7 @@ export default {
       }
       context.drawImage(video, (OUTPUT_WIDTH - drawWidth) / 2, (OUTPUT_HEIGHT - drawHeight) / 2, drawWidth, drawHeight);
       context.restore();
-      drawFrame(context, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+      drawFrame(context, OUTPUT_WIDTH, OUTPUT_HEIGHT, badge);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       stopCamera();
       const shot = h('img', { src: dataUrl, alt: 'عکس با قاب زانیس' });

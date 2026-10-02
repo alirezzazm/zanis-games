@@ -82,6 +82,24 @@ export function setupCanvas(canvas, width, height) {
   return context;
 }
 
+const imageCache = new Map();
+
+/** Loads an image once and resolves with the decoded element (cached per URL). */
+export function loadImage(source) {
+  if (!imageCache.has(source)) {
+    imageCache.set(
+      source,
+      new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error(`cannot load ${source}`));
+        image.src = source;
+      }),
+    );
+  }
+  return imageCache.get(source);
+}
+
 /** Bridge to the Android host (see MainActivity.Bridge). All calls are optional no-ops in a browser. */
 export const host = {
   vibrate(ms = 20) {

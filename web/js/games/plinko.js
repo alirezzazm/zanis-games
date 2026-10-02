@@ -1,9 +1,11 @@
 // Plinko: drop a glowing lamp from the top; it bounces through the pegs into a prize bin.
 // The bin is decided by the physics; the prize of each bin is dealt from the available stock.
 
-import { h, setupCanvas, clamp, shuffle, host } from '../core/util.js';
+import { h, setupCanvas, clamp, shuffle, host, loadImage } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { store } from '../core/store.js';
+import { prizeImage } from '../data/products.js';
+import { prizeResult, PRACTICE_HINT } from './prize.js';
 
 const ROWS = 8;
 const BINS = 7;
@@ -60,7 +62,7 @@ export function createPegs(width, height) {
 export default {
   id: 'plinko',
   title: 'پلینکو',
-  blurb: 'لامپ را رها کن تا در خانهٔ جایزه بیفتد',
+  blurb: 'لامپ را رها کن تا در خانهٔ یکی از محصولات بیفتد',
   emoji: '🔻',
   category: 'شانسی',
   kind: 'chance',
@@ -78,7 +80,9 @@ export default {
     // One prize per bin: real prizes are spread between "empty" bins.
     const pool = store.availablePrizes();
     const bins = shuffle(Array.from({ length: BINS }, (_, index) => pool[index % pool.length]));
-    const binTop = height - height * 0.12;
+    const binTop = height - height * 0.16;
+    const practice = !store.hasPrizeRound('plinko');
+    const photos = new Map();
 
     let ball = null;
     let aimX = width / 2;
@@ -93,11 +97,21 @@ export default {
         context.globalAlpha = 0.9;
         context.fillRect(index * binWidth + 2, binTop, binWidth - 4, height - binTop);
         context.globalAlpha = 1;
+        const centerX = index * binWidth + binWidth / 2;
+        const photo = photos.get(prize.id);
+        if (photo) {
+          const side = Math.min(binWidth - 10, (height - binTop) * 0.62);
+          context.fillStyle = '#fff';
+          context.beginPath();
+          context.roundRect(centerX - side / 2, binTop + 4, side, side, 6);
+          context.fill();
+          context.drawImage(photo, centerX - side / 2 + 2, binTop + 6, side - 4, side - 4);
+        }
         context.fillStyle = prize.empty ? '#c9d2f5' : '#10162c';
-        context.font = `700 ${Math.round(width / 34)}px Vazirmatn, sans-serif`;
+        context.font = `700 ${Math.round(width / 38)}px Vazirmatn, sans-serif`;
         context.textAlign = 'center';
         context.direction = 'rtl';
-        context.fillText(prize.short, index * binWidth + binWidth / 2, binTop + (height - binTop) / 2 + 4);
+        context.fillText(prize.short, centerX, photo ? height - 6 : binTop + (height - binTop) / 2 + 4);
       });
       context.fillStyle = '#8f9cd0';
       pegs.forEach((peg) => {
@@ -130,16 +144,12 @@ export default {
         finished = true;
         const index = clamp(Math.floor(ball.x / binWidth), 0, BINS - 1);
         const prize = bins[index];
-        store.awardPrize('plinko', prize.id);
-        store.countChancePlay('plinko');
+        if (!practice) {
+          store.awardPrize('plinko', prize.id);
+          store.countChancePlay('plinko');
+        }
         host.vibrate(60);
-        api.finish({
-          score: prize.empty ? 0 : 50,
-          emoji: prize.empty ? '🙈' : '🎁',
-          title: prize.empty ? 'این بار پوچ!' : prize.label,
-          detail: prize.empty ? 'شانست را در بازی‌های دیگر امتحان کن.' : 'جایزه‌ات را از مسئول غرفه بگیر.',
-          win: !prize.empty,
-        });
+        api.finish(prizeResult(prize, practice));
         return;
       }
       frame = requestAnimationFrame(step);
@@ -161,8 +171,18 @@ export default {
     canvas.addEventListener('pointerdown', aim);
     canvas.addEventListener('pointermove', (event) => event.buttons && aim(event));
     canvas.addEventListener('pointerup', drop);
-    api.setHint('انگشتت را روی بالای صفحه جابه‌جا کن و رها کن.');
+    api.setHint(practice ? PRACTICE_HINT : 'انگشتت را روی بالای صفحه جابه‌جا کن و رها کن.');
     draw();
+    bins.forEach((prize) => {
+      const source = prizeImage(prize);
+      if (!source) return;
+      loadImage(source)
+        .then((image) => {
+          photos.set(prize.id, image);
+          if (!ball) draw();
+        })
+        .catch(() => {}); // a missing photo just leaves the text label
+    });
 
     return () => cancelAnimationFrame(frame);
   },

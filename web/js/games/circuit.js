@@ -3,6 +3,7 @@
 
 import { h, randomInt, shuffle, fa, host } from '../core/util.js';
 import { sfx } from '../core/audio.js';
+import { LIGHT_PRODUCTS } from '../data/products.js';
 
 const SIZE = 5;
 const MAX_SCORE = 100;
@@ -103,12 +104,14 @@ function wireSvg(mask) {
 export default {
   id: 'circuit',
   title: 'مدار را ببند',
-  blurb: 'سیم‌ها را بچرخان تا لامپ روشن شود',
+  blurb: 'سیم‌ها را بچرخان تا محصول زانیس روشن شود',
   emoji: '🔌',
   category: 'چالش فنی',
   kind: 'score',
   mount(stage, api) {
     const { masks: solution, startRow, endRow } = createBoard();
+    // The thing to power up is a different Zanis light every round.
+    const product = LIGHT_PRODUCTS[randomInt(0, LIGHT_PRODUCTS.length - 1)];
     // Scramble by rotating every tile a random number of quarter turns.
     const masks = solution.map((mask) => {
       let turned = mask;
@@ -121,18 +124,18 @@ export default {
 
     const cells = masks.map((_, index) => h('button.cell', { onclick: () => turn(index) }));
     const grid = h('div.circuit', { style: { gridTemplateColumns: `repeat(${SIZE}, 1fr)` } }, cells);
-    const side = (row, emoji) =>
+    const side = (row, content) =>
       h(
-        'div',
-        { style: { display: 'grid', gridTemplateRows: `repeat(${SIZE}, 1fr)`, fontSize: '26px', alignItems: 'center' } },
-        Array.from({ length: SIZE }, (_, index) => h('span', { style: { opacity: index === row ? '1' : '0' } }, emoji)),
+        'div.circuit-side',
+        { style: { gridTemplateRows: `repeat(${SIZE}, 1fr)` } },
+        Array.from({ length: SIZE }, (_, index) => h('span', index === row ? content : null)),
       );
-    const lamp = side(endRow, '💡');
+    const lampPhoto = h('img.circuit-lamp', { src: product.image, alt: product.name, draggable: false });
+    const lamp = side(endRow, lampPhoto);
     // Layout is forced LTR so "battery left, lamp right" matches the wire directions.
     stage.append(
       h('div', { style: { display: 'flex', direction: 'ltr', gap: '6px', width: '100%', justifyContent: 'center' } }, side(startRow, '🔋'), grid, lamp),
     );
-    lamp.style.filter = 'grayscale(1)';
 
     const clock = setInterval(() => {
       seconds += 1;
@@ -163,7 +166,7 @@ export default {
       if (!render()) return;
       done = true;
       clearInterval(clock);
-      lamp.style.filter = 'drop-shadow(0 0 12px #ffc21a)';
+      lampPhoto.classList.add('lit');
       host.vibrate(60);
       const score = Math.max(10, Math.round(MAX_SCORE - seconds * 0.7 - moves * 0.4));
       setTimeout(
@@ -171,8 +174,9 @@ export default {
           api.finish({
             score,
             emoji: '💡',
-            title: 'لامپ روشن شد!',
-            detail: `${fa(score)} امتیاز · ${fa(moves)} چرخش در ${fa(seconds)} ثانیه`,
+            image: product.image,
+            title: 'روشن شد!',
+            detail: `${product.name} · ${fa(score)} امتیاز · ${fa(moves)} چرخش در ${fa(seconds)} ثانیه`,
             win: true,
           }),
         700,

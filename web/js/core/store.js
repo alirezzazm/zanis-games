@@ -13,7 +13,9 @@ const initialState = () => ({
   currentPhone: null,
   prizes: DEFAULT_PRIZES.map((prize) => ({ ...prize })),
   stations: DEFAULT_STATIONS.map((station) => ({ ...station })),
-  settings: { pin: '1405', chancePlaysPerVisitor: 1, muted: false },
+  // prizeRoundsPerVisitor: how many rounds of each chance game can win a prize (0 = unlimited).
+  // Further rounds are still playable, as practice rounds that award nothing.
+  settings: { pin: '1405', prizeRoundsPerVisitor: 1, muted: false },
 });
 
 function load() {
@@ -89,9 +91,13 @@ export const store = {
   playsOf(gameId) {
     return this.currentPlayer()?.plays[gameId] ?? 0;
   },
-  /** Chance games are limited per visitor so the prize stock lasts the whole exhibition. */
-  canPlayChance(gameId) {
-    return this.playsOf(gameId) < state.settings.chancePlaysPerVisitor;
+  /**
+   * True while the visitor can still win a prize in this chance game. Prize rounds are limited per
+   * visitor so the stock lasts the whole exhibition; after that the game stays playable for fun.
+   */
+  hasPrizeRound(gameId) {
+    const limit = state.settings.prizeRoundsPerVisitor;
+    return limit === 0 || this.playsOf(gameId) < limit;
   },
   countChancePlay(gameId) {
     const player = this.currentPlayer();
@@ -106,12 +112,16 @@ export const store = {
     // If the operator ran every prize down to zero, the games still need something to land on.
     return available.length ? available : [NO_PRIZE];
   },
-  /** Weighted random draw among available prizes; decrements the stock and logs it for the visitor. */
-  drawPrize(gameId) {
+  /**
+   * Weighted random draw among available prizes. A normal round decrements the stock and logs the
+   * prize for the visitor; a practice round only picks what to show.
+   */
+  drawPrize(gameId, { practice = false } = {}) {
     const pool = this.availablePrizes();
     const totalWeight = pool.reduce((sum, prize) => sum + prize.weight, 0);
     let pick = Math.random() * totalWeight;
     const prize = pool.find((candidate) => (pick -= candidate.weight) < 0) ?? pool[pool.length - 1];
+    if (practice) return prize;
     // The play is counted as soon as the prize is committed, so leaving the screen cannot re-roll it.
     this.countChancePlay(gameId);
     this.awardPrize(gameId, prize.id);

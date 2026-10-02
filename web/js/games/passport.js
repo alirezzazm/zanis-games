@@ -4,6 +4,7 @@
 import { h, fa, toLatinDigits, toast, host } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { store } from '../core/store.js';
+import { prizeImage } from '../data/products.js';
 
 const POINTS_PER_STAMP = 20;
 
@@ -37,7 +38,9 @@ export default {
           stations.map((station) =>
             h(
               `div.stamp${collected.includes(station.id) ? '.got' : ''}`,
-              h('div.emoji', station.emoji),
+              prizeImage(station)
+                ? h('img', { src: prizeImage(station), alt: '', draggable: false })
+                : h('div.emoji', station.emoji),
               h('b', station.title),
               h('div', collected.includes(station.id) ? 'مهر شد ✓' : 'هنوز نه'),
             ),

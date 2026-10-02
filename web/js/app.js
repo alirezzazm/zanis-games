@@ -100,20 +100,19 @@ function homeScreen() {
     ids.map((id, index) => {
       const game = GAMES.find((candidate) => candidate.id === id);
       const best = player.scores[id];
-      const usedUp = game.kind === 'chance' && !store.canPlayChance(id);
+      const practice = game.kind === 'chance' && !store.hasPrizeRound(id);
       return h('button.tile', {
           id: `tile-${id}`,
-          style: { animationDelay: `${index * 50}ms`, opacity: usedUp ? '0.5' : '1' },
+          style: { animationDelay: `${index * 50}ms` },
           onclick: () => {
             sfx.tap();
-            if (usedUp) toast('این بازی شانسی را قبلاً انجام داده‌ای.');
-            else navigate(`#/play/${id}`);
+            navigate(`#/play/${id}`);
           },
         },
         best ? h('span.best', `${fa(best)} امتیاز`) : null,
         h('span.emoji', game.emoji),
         h('b', game.title),
-        h('small', usedUp ? 'انجام شد ✓' : game.blurb),
+        h('small', practice ? 'جایزه‌ات را گرفته‌ای؛ دور تفریحی' : game.blurb),
       );
     });
 
@@ -140,10 +139,6 @@ function homeScreen() {
 function gameScreen(gameId) {
   const game = GAMES.find((candidate) => candidate.id === gameId);
   if (!game) return navigate('#/');
-  if (game.kind === 'chance' && !store.canPlayChance(game.id)) {
-    toast('این بازی شانسی را قبلاً انجام داده‌ای.');
-    return navigate('#/');
-  }
   const hud = h('div.hud');
   const stage = h('div.stage');
   const hint = h('p.hint');
@@ -156,21 +151,20 @@ function gameScreen(gameId) {
     setHint(text) {
       hint.textContent = text;
     },
-    finish({ score, emoji, title, detail, win }) {
+    finish({ score, emoji, image, title, detail, win }) {
       if (finished) return;
       finished = true;
       // Chance games count the play when the prize is committed (see store.drawPrize).
       const isBest = store.recordScore(game.id, score, { countPlay: game.kind !== 'chance' });
       (win ? sfx.win : sfx.lose)();
-      const replayable = game.kind !== 'chance' || store.canPlayChance(game.id);
       const overlay = h('div.overlay',
         h('div.card.stack',
-          h('div.emoji', emoji),
+          image ? h('img.result-photo', { src: image, alt: '', draggable: false }) : h('div.emoji', emoji),
           h('div.big', title),
           h('p.muted', { style: { lineHeight: '1.9' } }, detail),
           isBest && score > 0 && game.kind === 'score' ? h('b', { style: { color: 'var(--green)' } }, 'رکورد جدید تو! 🎉') : null,
           h('div.row',
-            replayable ? h('button.btn.secondary.grow', { onclick: () => { overlay.remove(); navigate(`#/play/${game.id}`); } }, 'دوباره') : null,
+            h('button.btn.secondary.grow', { id: 'result-again', onclick: () => { overlay.remove(); navigate(`#/play/${game.id}`); } }, 'دوباره'),
             h('button.btn.grow', { id: 'result-home', onclick: () => { overlay.remove(); navigate('#/'); } }, 'بازی‌های دیگر'),
           ),
         ),
@@ -255,7 +249,7 @@ function operatorScreen() {
   function panelView() {
     const players = Object.values(store.state.players);
     const csv = h('textarea.csv', { readOnly: true, value: store.exportCsv() });
-    const chances = h('input', { type: 'number', min: 1, max: 20, value: settings.chancePlaysPerVisitor });
+    const prizeRounds = h('input', { type: 'number', min: 0, max: 20, value: settings.prizeRoundsPerVisitor });
     const newPin = h('input', { inputMode: 'numeric', maxLength: 8, placeholder: 'رمز جدید (۴ تا ۸ رقم)' });
 
     return h('div.stack',
@@ -283,13 +277,14 @@ function operatorScreen() {
       ),
       h('div.card.stack',
         h('b', 'تنظیمات'),
-        h('div.field', h('label', 'هر بازدیدکننده چند بار هر بازی شانسی را انجام دهد؟'), chances),
+        h('div.field', h('label', 'هر نفر در هر بازی شانسی چند بار جایزه بگیرد؟ (۰ = نامحدود)'), prizeRounds),
+        h('p.muted', { style: { fontSize: '12px', lineHeight: '1.8' } }, 'بعد از این تعداد، بازی باز هم قابل انجام است ولی به‌صورت دور تفریحی و بدون جایزه.'),
         h('button.btn.secondary.block', {
           onclick: () => {
-            store.updateSettings({ chancePlaysPerVisitor: Math.min(20, Math.max(1, Math.trunc(Number(chances.value)) || 1)) });
+            store.updateSettings({ prizeRoundsPerVisitor: Math.min(20, Math.max(0, Math.trunc(Number(prizeRounds.value)) || 0)) });
             toast('ذخیره شد');
           },
-        }, 'ذخیرهٔ تعداد دفعات'),
+        }, 'ذخیرهٔ تعداد جایزه'),
         h('div.field', h('label', 'تغییر رمز مسئول'), newPin),
         h('button.btn.secondary.block', {
           onclick: () => {
