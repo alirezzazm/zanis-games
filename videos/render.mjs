@@ -65,7 +65,9 @@ try {
     writeFileSync(soundtrack, Buffer.from(await page.evaluate((id) => window.renderAudio(id), sceneId), 'base64'));
     const mux = spawn(
       'ffmpeg',
-      ['-y', '-loglevel', 'error', '-i', silent, '-i', soundtrack, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
+      ['-y', '-loglevel', 'error', '-i', silent, '-i', soundtrack, '-c:v', 'copy',
+        // The synthesised track is quiet; normalise it to a comfortable playback loudness.
+        '-af', 'loudnorm=I=-18:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '160k', '-ar', '44100',
         '-shortest', '-movflags', '+faststart', output],
       { stdio: 'inherit' },
     );

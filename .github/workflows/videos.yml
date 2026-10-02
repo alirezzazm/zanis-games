@@ -39,8 +39,19 @@ jobs:
             test "$(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$file")" = aac
             volume=$(ffmpeg -hide_banner -i "$file" -af volumedetect -vn -f null - 2>&1 | grep mean_volume | sed 's/.*mean_volume: \(-*[0-9.]*\) dB.*/\1/')
             echo "mean volume: ${volume} dB"
-            awk -v v="$volume" 'BEGIN { exit !(v > -45) }'
+            awk -v v="$volume" 'BEGIN { exit !(v > -30) }'
           done
+      - name: Still frames for review
+        run: |
+          mkdir -p stills
+          for at in 5 10 13.5 19 23 31; do ffmpeg -y -loglevel error -ss "$at" -i videos/out/zanis-vr-ar.mp4 -frames:v 1 "stills/vr-ar-${at}.jpg"; done
+          ffmpeg -y -loglevel error -ss 8 -i videos/out/zanis-buzz-wire.mp4 -frames:v 1 stills/buzz-wire-8.jpg
+          ffmpeg -y -loglevel error -ss 20 -i videos/out/zanis-install-race.mp4 -frames:v 1 stills/install-race-20.jpg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stills
+          path: stills
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: zanis-videos
