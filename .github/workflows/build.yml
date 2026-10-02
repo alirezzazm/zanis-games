@@ -97,3 +97,46 @@ jobs:
             --title "بازی‌های زانیس ${VERSION_NAME}" \
             --notes "ساخت خودکار از کامیت ${GITHUB_SHA::7}. فایل APK را روی تبلت یا گوشی اندروید ۸ به بالا نصب کنید." \
             --latest
+
+  smoke:
+    name: Launch on emulator (Android 14)
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zanis-games-apk
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install, launch and check the first screen
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install apk/*.apk
+            adb logcat -c
+            adb shell am start -W -n ir.zanis.games/.MainActivity
+            sleep 15
+            adb exec-out screencap -p > first-screen.png
+            adb shell pidof ir.zanis.games
+            for attempt in 1 2 3 4 5; do adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1; grep -q "بازی کن" ui.xml && break; sleep 4; done
+            adb logcat -d > logcat.txt
+            if grep -q "FATAL EXCEPTION" logcat.txt; then echo "app crashed"; grep -A 20 "FATAL EXCEPTION" logcat.txt; exit 1; fi
+            grep -q "بازی کن" ui.xml || { echo "sign-in screen not found in the UI dump"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-first-screen
+          path: |
+            first-screen.png
+            ui.xml
+          retention-days: 14

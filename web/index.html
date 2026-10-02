@@ -10,6 +10,16 @@
   <body>
     <div id="app" aria-live="polite"></div>
     <div id="toast" role="status"></div>
+    <script>
+      // The games need a WebView/browser from 2020 or later (Chromium 86+). Older ones cannot even
+      // parse the modules, so tell the operator what to do instead of showing a blank screen.
+      if (!('replaceChildren' in Element.prototype) || !('noModule' in HTMLScriptElement.prototype)) {
+        document.getElementById('app').innerHTML =
+          '<div style="margin:auto;text-align:center;line-height:2;padding:24px">' +
+          '<h2>مرورگر داخلی این دستگاه قدیمی است</h2>' +
+          '<p>برنامهٔ «Android System WebView» را از فروشگاه به‌روز کنید و دوباره وارد شوید.</p></div>';
+      }
+    </script>
     <script type="module" src="js/app.js"></script>
   </body>
 </html>
