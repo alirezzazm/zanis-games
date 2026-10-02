@@ -1,0 +1,99 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'android/**', 'test/**', '.github/workflows/build.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  VERSION_NAME: 1.0.${{ github.run_number }}
+  VERSION_CODE: ${{ github.run_number }}
+  # SHA-256 of the release signing certificate; the build fails if the APK is signed with anything else.
+  EXPECTED_CERT_SHA256: 437c1e493ecdc76996b897906e3fe8239ef0ed701cc47b0b9f1a1395195f9048
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check
+        run: for file in $(find web/js -name '*.js'); do node --check "$file"; done
+      - name: Unit tests
+        run: node --test test/*.mjs
+
+  apk:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # publish the APK as a GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Restore signing key
+        env:
+          ZANIS_KEYSTORE_B64: ${{ secrets.ZANIS_KEYSTORE_B64 }}
+        run: |
+          echo "$ZANIS_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/zanis.p12"
+          echo "ZANIS_KEYSTORE_FILE=$RUNNER_TEMP/zanis.p12" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          ZANIS_KEYSTORE_PASSWORD: ${{ secrets.ZANIS_KEYSTORE_PASSWORD }}
+          ZANIS_KEY_ALIAS: ${{ secrets.ZANIS_KEY_ALIAS }}
+        run: gradle assembleRelease --no-daemon
+
+      - name: Verify signature and inspect
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          APK=zanis-games-${VERSION_NAME}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk "$APK"
+          CERT=$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | grep -m1 'SHA-256' | awk '{print $NF}')
+          echo "certificate sha256: $CERT"
+          test "$CERT" = "$EXPECTED_CERT_SHA256" || { echo "::error::APK is not signed with the release key"; exit 1; }
+          {
+            echo '### APK'
+            echo '```'
+            "$BUILD_TOOLS/aapt2" dump badging "$APK" | grep -E "^(package|sdkVersion|targetSdkVersion|uses-permission|application-label:)"
+            ls -la "$APK"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "APK=$APK" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zanis-games-apk
+          path: ${{ env.APK }}
+          retention-days: 30
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${VERSION_NAME}" "$APK" \
+            --title "بازی‌های زانیس ${VERSION_NAME}" \
+            --notes "ساخت خودکار از کامیت ${GITHUB_SHA::7}. فایل APK را روی تبلت یا گوشی اندروید ۸ به بالا نصب کنید." \
+            --latest

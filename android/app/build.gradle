@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing comes from the environment (GitHub Secrets in CI). Without it the build is
+// signed with the debug key, so a local build still works.
+def keystorePath = System.getenv('ZANIS_KEYSTORE_FILE')
+def hasReleaseKey = keystorePath != null && file(keystorePath).exists()
+
+android {
+    namespace 'ir.zanis.games'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ir.zanis.games'
+        minSdk 26
+        targetSdk 35
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as Integer)
+        versionName System.getenv('VERSION_NAME') ?: '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseKey) {
+                storeFile file(keystorePath)
+                storeType 'pkcs12'
+                storePassword System.getenv('ZANIS_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ZANIS_KEY_ALIAS')
+                keyPassword System.getenv('ZANIS_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // The games are a plain web app in /web; it is copied into the APK assets at build time.
+    sourceSets {
+        main {
+            assets.srcDirs += layout.buildDirectory.dir('webassets')
+        }
+    }
+}
+
+def copyWebApp = tasks.register('copyWebApp', Copy) {
+    from rootProject.file('../web')
+    into layout.buildDirectory.dir('webassets/www')
+}
+tasks.named('preBuild') { dependsOn copyWebApp }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}

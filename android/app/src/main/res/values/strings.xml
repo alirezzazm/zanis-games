@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">بازی‌های زانیس</string>
+    <string name="photo_saved">عکس در گالری ذخیره شد</string>
+    <string name="photo_failed">ذخیرهٔ عکس انجام نشد</string>
+    <string name="share_title">ارسال</string>
+</resources>

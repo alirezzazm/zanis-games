@@ -1,0 +1,10 @@
+build/
+.gradle/
+*.apk
+*.p12
+*.jks
+*.keystore
+local.properties
+node_modules/
+.DS_Store
+videos/out/
