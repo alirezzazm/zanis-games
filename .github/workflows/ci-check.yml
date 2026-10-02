@@ -1,0 +1,9 @@
+name: CI check
+on: [push, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "runner ok" && java -version && echo "$ANDROID_HOME" && ls "$ANDROID_HOME/build-tools" | tail -3
