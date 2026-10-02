@@ -130,6 +130,7 @@ jobs:
             adb shell pidof ir.zanis.games
             for attempt in 1 2 3 4 5; do adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1; grep -q "بازی کن" ui.xml && break; sleep 4; done
             adb logcat -d > logcat.txt
+            grep -E "ZanisGames|chromium|WebView" logcat.txt | tail -60 || true
             if grep -q "FATAL EXCEPTION" logcat.txt; then echo "app crashed"; grep -A 20 "FATAL EXCEPTION" logcat.txt; exit 1; fi
             grep -q "بازی کن" ui.xml || { echo "sign-in screen not found in the UI dump"; exit 1; }
       - uses: actions/upload-artifact@v4
@@ -139,4 +140,5 @@ jobs:
           path: |
             first-screen.png
             ui.xml
+            logcat.txt
           retention-days: 14

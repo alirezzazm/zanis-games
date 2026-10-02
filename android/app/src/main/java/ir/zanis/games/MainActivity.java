@@ -13,11 +13,14 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -42,6 +45,7 @@ public class MainActivity extends Activity {
     private static final String APP_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + APP_HOST + "/assets/www/index.html";
     private static final int CAMERA_REQUEST = 1;
+    private static final String LOG_TAG = "ZanisGames";
 
     private WebView webView;
     /** A camera request from the page that is waiting for the runtime permission dialog. */
@@ -81,12 +85,26 @@ public class MainActivity extends Activity {
                 // The app is fully offline: never navigate away from the bundled pages.
                 return !APP_HOST.equals(request.getUrl().getHost());
             }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                Log.e(LOG_TAG, "load failed: " + request.getUrl() + " — " + error.getDescription());
+            }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> handlePermissionRequest(request));
+            }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                // Surface page errors in logcat; they are the only trace of a JavaScript failure on a device.
+                if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    Log.e(LOG_TAG, message.message() + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+                }
+                return true;
             }
         });
 
