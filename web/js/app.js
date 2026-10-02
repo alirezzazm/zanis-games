@@ -332,3 +332,5 @@ function operatorScreen() {
 sfx.setMuted(store.state.settings.muted);
 window.addEventListener('hashchange', render);
 render();
+// The Android host forwards this line to logcat; the CI smoke test waits for it.
+console.info('zanis-games ready');

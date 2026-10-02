@@ -100,9 +100,13 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
-                // Surface page errors in logcat; they are the only trace of a JavaScript failure on a device.
+                // Surface page messages in logcat; they are the only trace of a JavaScript failure on a
+                // device, and the CI smoke test waits for the "ready" line the web app logs on start.
                 if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
-                    Log.e(LOG_TAG, message.message() + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+                    Log.e(LOG_TAG, "console error: " + message.message()
+                            + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+                } else {
+                    Log.i(LOG_TAG, message.message());
                 }
                 return true;
             }
