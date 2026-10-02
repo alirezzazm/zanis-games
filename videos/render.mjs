@@ -1,0 +1,65 @@
+// Renders every scene in scenes.js to an MP4: headless Chrome draws each frame on the canvas,
+// the JPEG frames are piped to ffmpeg. Runs in CI (see .github/workflows/videos.yml).
+//
+//   npm install --no-save puppeteer-core && node videos/render.mjs
+//   env: CHROME_PATH (default /usr/bin/google-chrome), FPS (default 30)
+
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import puppeteer from 'puppeteer-core';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const outDir = path.join(here, 'out');
+const fps = Number(process.env.FPS ?? 30);
+
+mkdirSync(outDir, { recursive: true });
+
+const browser = await puppeteer.launch({
+  executablePath: process.env.CHROME_PATH ?? '/usr/bin/google-chrome',
+  // The page loads the fonts from ../web/fonts through file:// URLs.
+  args: ['--no-sandbox', '--allow-file-access-from-files'],
+});
+
+try {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  await page.goto(pathToFileURL(path.join(here, 'scenes.html')).href);
+  // Fonts load lazily; force both weights before the first frame so no frame falls back to a system font.
+  await page.evaluate(async () => {
+    await Promise.all([document.fonts.load('700 32px Vazirmatn'), document.fonts.load('900 32px Vazirmatn')]);
+    await document.fonts.ready;
+  });
+  const scenes = await page.evaluate(() => window.SCENES);
+
+  for (const [sceneId, duration] of Object.entries(scenes)) {
+    const output = path.join(outDir, `zanis-${sceneId}.mp4`);
+    const ffmpeg = spawn(
+      'ffmpeg',
+      ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', output],
+      { stdio: ['pipe', 'inherit', 'inherit'] },
+    );
+    const frames = Math.round(duration * fps);
+    for (let frame = 0; frame < frames; frame++) {
+      const dataUrl = await page.evaluate(
+        (id, seconds) => {
+          window.renderFrame(id, seconds);
+          return document.getElementById('stage').toDataURL('image/jpeg', 0.92);
+        },
+        sceneId,
+        frame / fps,
+      );
+      const jpeg = Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64');
+      if (!ffmpeg.stdin.write(jpeg)) await once(ffmpeg.stdin, 'drain');
+    }
+    ffmpeg.stdin.end();
+    const [exitCode] = await once(ffmpeg, 'close');
+    if (exitCode !== 0) throw new Error(`ffmpeg failed for ${sceneId} (exit ${exitCode})`);
+    console.log(`rendered ${output} (${frames} frames)`);
+  }
+} finally {
+  await browser.close();
+}

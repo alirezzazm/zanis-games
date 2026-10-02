@@ -1,0 +1,49 @@
+name: Render videos
+
+on:
+  push:
+    branches: [main]
+    paths: ['videos/**', '.github/workflows/videos.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: videos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # attach the MP4 files to the "videos" release
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install ffmpeg and puppeteer-core
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          npm install --no-save --no-audit --no-fund puppeteer-core
+      - name: Render scenes
+        run: node videos/render.mjs
+      - name: Check output
+        run: |
+          set -euo pipefail
+          for file in videos/out/*.mp4; do
+            duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$file")
+            echo "$file: ${duration}s, $(stat -c %s "$file") bytes"
+            awk -v d="$duration" 'BEGIN { exit !(d > 20) }'
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zanis-videos
+          path: videos/out/*.mp4
+          retention-days: 30
+      - name: Publish to the videos release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view videos >/dev/null 2>&1 || gh release create videos --title "ویدئوهای شبیه‌سازی غرفه" --notes "ویدئوی انیمیشنی فعالیت‌هایی که اپ اندروید نمی‌شوند: سیم و حلقه، تجربهٔ VR/AR و مسابقهٔ سرعت نصب." --latest=false
+          gh release upload videos videos/out/*.mp4 --clobber
