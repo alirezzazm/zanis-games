@@ -2,7 +2,8 @@
 // (physical buzz-wire, VR/AR experience, live installation race).
 //
 // Every scene is a pure function of time: renderFrame(sceneId, seconds) draws one frame.
-// Open scenes.html?scene=buzz-wire in a browser to preview; videos/render.mjs turns them into MP4.
+// Open scenes.html?scene=buzz-wire in a browser to preview; videos/render.mjs turns them into MP4
+// and adds the soundtrack from audio.js.
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -24,6 +25,28 @@ const COLOR = {
   skin: '#f2c9a0',
   metal: '#cfd6ee',
 };
+
+// Real product photos used inside the scenes (the VR product menu). Loaded once before rendering.
+const PRODUCT_NAMES = {
+  'square-panel-6060': 'پنل مربع ۶۰×۶۰',
+  'backlight-20w': 'بک لایت ۲۰ وات',
+  'bulb-12w': 'لامپ حبابی ۱۲ وات',
+};
+const ASSETS = {};
+window.assetsReady = Promise.all(
+  Object.keys(PRODUCT_NAMES).map(
+    (productId) =>
+      new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => {
+          ASSETS[productId] = image;
+          resolve();
+        };
+        image.onerror = resolve; // the menu card is simply left blank
+        image.src = `../web/img/products/${productId}.webp`;
+      }),
+  ),
+);
 
 // ---------------------------------------------------------------- helpers
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
@@ -281,75 +304,196 @@ function buzzWire(time) {
 }
 
 // ---------------------------------------------------------------- scene 2: VR / AR
-function virtualRoom(x, y, width, height, time, warmth, lightsOn) {
+// Timeline (seconds): 0 title · 2.4 visitor puts the headset on · 8 first-person view inside the
+// headset (dark room → Zanis panels switch on → product menu → colour temperature) · 27 AR on a phone.
+const VR = { headsetOn: 6.2, povStart: 8, lightsStart: 11.3, menuStart: 15.5, select: 18.2, tempStart: 20.5, povEnd: 26.5, arStart: 27 };
+const VR_MENU = ['square-panel-6060', 'backlight-20w', 'bulb-12w'];
+
+/** A quadrilateral given by four [x, y] corners. */
+function quad(points, fill, alpha = 1) {
   c.save();
+  c.globalAlpha = alpha;
+  c.fillStyle = fill;
   c.beginPath();
-  c.roundRect(x, y, width, height, 26);
-  c.clip();
-  const wall = `rgb(${Math.round(lerp(40, 70, lightsOn))},${Math.round(lerp(48, 66, lightsOn))},${Math.round(lerp(80, 84, lightsOn))})`;
-  c.fillStyle = wall;
-  c.fillRect(x, y, width, height);
-  c.fillStyle = '#1b2242';
-  c.fillRect(x, y + height * 0.72, width, height * 0.28);
-  // Sofa and table
-  roundRect(x + width * 0.12, y + height * 0.56, width * 0.36, height * 0.2, 16, '#3d4a86');
-  roundRect(x + width * 0.6, y + height * 0.62, width * 0.24, height * 0.12, 8, '#5b4630');
-  // Ceiling panels turning on one after another; colour temperature follows `warmth`.
-  const lightColor = warmth > 0.5 ? '#ffd9a0' : '#dff1ff';
+  points.forEach(([x, y], index) => (index ? c.lineTo(x, y) : c.moveTo(x, y)));
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+const mix = (from, to, amount) => {
+  const parse = (hex) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+  const [a, b] = [parse(from), parse(to)];
+  // Hex output, because glow() appends an alpha suffix to the colour it is given.
+  return `#${a.map((value, index) => Math.round(lerp(value, b[index], amount)).toString(16).padStart(2, '0')).join('')}`;
+};
+
+/**
+ * First-person view: a room in one-point perspective. `pan` shifts the vanishing point as the head
+ * turns, `lightsOn` (0..3) switches the ceiling fixtures on one by one, `warmth` (0 cool .. 1 warm)
+ * sets the colour temperature, `round` swaps the square panels for round backlights.
+ */
+function povRoom(pan, lightsOn, warmth, round) {
+  const back = { x: 380 + pan, y: 190, w: 520, h: 300 };
+  const lit = clamp(lightsOn / 3);
+  const lightColor = mix('#dff1ff', '#ffd9a0', warmth);
+  const shade = (dark, bright) => mix(dark, bright, lit);
+  const corners = { tl: [back.x, back.y], tr: [back.x + back.w, back.y], bl: [back.x, back.y + back.h], br: [back.x + back.w, back.y + back.h] };
+
+  quad([[0, 0], [WIDTH, 0], corners.tr, corners.tl], shade('#10162c', '#e8ecf8')); // ceiling
+  quad([[0, HEIGHT], [WIDTH, HEIGHT], corners.br, corners.bl], shade('#0c1124', '#8a6f52')); // floor
+  quad([[0, 0], corners.tl, corners.bl, [0, HEIGHT]], shade('#141b36', '#c9d3ee')); // left wall
+  quad([[WIDTH, 0], corners.tr, corners.br, [WIDTH, HEIGHT]], shade('#141b36', '#bcc8e8')); // right wall
+  quad([corners.tl, corners.tr, corners.br, corners.bl], shade('#19213f', '#dde4f7')); // back wall
+
+  // Furniture on the back wall: sofa, picture, side table with a plant.
+  roundRect(back.x + 70, back.y + 190, 250, 90, 18, shade('#232c52', '#4d5fa8'));
+  roundRect(back.x + 90, back.y + 160, 210, 50, 14, shade('#2a3460', '#5d70bd'));
+  roundRect(back.x + 110, back.y + 40, 150, 90, 6, shade('#1d2547', '#f3e6c8'), shade('#2a3560', '#7a5a2e'));
+  roundRect(back.x + 380, back.y + 215, 80, 65, 6, shade('#232c52', '#7a5a2e'));
+  c.fillStyle = shade('#1f3a34', '#3fae6a');
+  c.beginPath();
+  c.ellipse(back.x + 420, back.y + 190, 34, 44, 0, 0, Math.PI * 2);
+  c.fill();
+  // A window on the left wall, in perspective.
+  quad([[90 + pan * 0.25, 190], [250 + pan * 0.55, 235], [250 + pan * 0.55, 400], [90 + pan * 0.25, 470]], shade('#0b1020', '#9fd0ff'));
+
+  // Three ceiling fixtures between the viewer and the back wall.
   for (let index = 0; index < 3; index++) {
-    const on = clamp(lightsOn * 3 - index);
-    const panelX = x + width * (0.2 + index * 0.3);
-    roundRect(panelX - 46, y + 14, 92, 16, 8, on > 0 ? lightColor : '#39446f');
+    const depth = 0.28 + index * 0.24; // 0 = at the viewer, 1 = at the back wall
+    const centerX = lerp(WIDTH / 2, back.x + back.w / 2, depth);
+    const y = lerp(0, back.y, depth) + 6;
+    const half = lerp(190, 74, depth);
+    const thick = lerp(64, 22, depth);
+    const on = clamp(lightsOn - index);
+    c.fillStyle = on > 0 ? lightColor : '#39446f';
+    c.beginPath();
+    if (round) c.ellipse(centerX, y + thick / 2, half * 0.62, thick * 0.62, 0, 0, Math.PI * 2);
+    else c.roundRect(centerX - half, y, half * 2, thick, 8);
+    c.fill();
     if (on > 0) {
-      c.save();
-      c.globalAlpha = 0.28 * on;
-      c.fillStyle = lightColor;
-      c.beginPath();
-      c.moveTo(panelX - 46, y + 30);
-      c.lineTo(panelX + 46, y + 30);
-      c.lineTo(panelX + 150, y + height);
-      c.lineTo(panelX - 150, y + height);
-      c.closePath();
-      c.fill();
-      c.restore();
+      quad([[centerX - half, y + thick], [centerX + half, y + thick], [centerX + half * 2.6, HEIGHT], [centerX - half * 2.6, HEIGHT]], lightColor, 0.16 * on);
+      glow(centerX, y + thick / 2, half * 1.5, lightColor, 0.35 * on);
     }
   }
-  c.restore();
-  c.strokeStyle = COLOR.blue;
-  c.lineWidth = 4;
+}
+
+/** Black goggle mask with a nose notch, so the frame reads as "seen through the headset". */
+function headsetMask() {
+  c.save();
+  c.fillStyle = '#000';
   c.beginPath();
-  c.roundRect(x, y, width, height, 26);
+  c.rect(0, 0, WIDTH, HEIGHT);
+  c.roundRect(50, 40, WIDTH - 100, HEIGHT - 150, 150);
+  c.fill('evenodd');
+  c.beginPath();
+  c.moveTo(WIDTH / 2 - 110, HEIGHT - 108);
+  c.quadraticCurveTo(WIDTH / 2, HEIGHT - 250, WIDTH / 2 + 110, HEIGHT - 108);
+  c.closePath();
+  c.fill();
+  const vignette = c.createRadialGradient(WIDTH / 2, 300, 260, WIDTH / 2, 300, 640);
+  vignette.addColorStop(0, '#00000000');
+  vignette.addColorStop(1, '#000000cc');
+  c.fillStyle = vignette;
+  c.fillRect(0, 0, WIDTH, HEIGHT);
+  c.restore();
+  roundRect(WIDTH / 2 - 150, 54, 300, 40, 20, '#000000aa', COLOR.blue);
+  text('نمای داخل هدست VR', WIDTH / 2, 75, { size: 22, color: COLOR.blue });
+}
+
+/** Floating product menu inside VR: three real Zanis products; the controller ray picks the middle one. */
+function vrMenu(time) {
+  const appear = easeOut(span(time, VR.menuStart, VR.menuStart + 0.8));
+  if (appear <= 0) return;
+  const selected = time >= VR.select;
+  VR_MENU.forEach((productId, index) => {
+    const x = 330 + index * 220;
+    const y = 250 + (1 - appear) * 60 + Math.sin(time * 1.6 + index) * 5;
+    const active = selected && index === 1;
+    c.save();
+    c.globalAlpha = appear * (selected && !active ? 0.45 : 1);
+    roundRect(x, y, 180, 210, 18, '#0b1020dd', active ? COLOR.gold : COLOR.blue);
+    roundRect(x + 20, y + 16, 140, 140, 12, '#ffffff');
+    const photo = ASSETS[productId];
+    if (photo) c.drawImage(photo, x + 24, y + 20, 132, 132);
+    c.restore();
+    text(PRODUCT_NAMES[productId], x + 90, y + 184, { size: 17, color: active ? COLOR.gold : COLOR.text, alpha: appear });
+  });
+  // Controller ray from the lower right towards the middle card.
+  const aim = easeInOut(span(time, VR.menuStart + 0.8, VR.select));
+  const target = { x: lerp(820, 640, aim), y: lerp(520, 370, aim) };
+  c.save();
+  c.globalAlpha = appear;
+  c.strokeStyle = COLOR.gold;
+  c.lineWidth = 4;
+  c.setLineDash([14, 10]);
+  c.beginPath();
+  c.moveTo(1010, 600);
+  c.lineTo(target.x, target.y);
   c.stroke();
+  c.setLineDash([]);
+  glow(target.x, target.y, selected ? 34 : 20, COLOR.gold, 0.9);
+  roundRect(985, 560, 70, 120, 26, '#1b2548', COLOR.blue);
+  c.restore();
 }
 
 function vrAr(time) {
-  booth(time);
-  if (time < 13.5) {
-    // --- VR part: visitor with a headset; the bubble shows what they see.
-    const look = Math.sin(time * 1.3) * 26;
-    person(300 + look * 0.3, 610, { shirt: COLOR.blue, headset: true, handA: { x: 230, y: 430 + Math.sin(time * 3) * 14 }, handB: { x: 380, y: 420 + Math.cos(time * 2.6) * 18 } });
-    c.fillStyle = '#4da3ff33';
-    c.beginPath();
-    c.moveTo(340, 392);
-    c.lineTo(520, 220);
-    c.lineTo(520, 460);
-    c.closePath();
-    c.fill();
-    const lightsOn = easeInOut(span(time, 4, 8));
-    const warmth = span(time, 9.2, 10.4) - span(time, 11.6, 12.6);
-    virtualRoom(520, 190, 620, 300, time, warmth, lightsOn);
-    text('آنچه بازدیدکننده می‌بیند', 830, 168, { size: 22, color: COLOR.blue });
-    if (time > 9) roundRect(560, 440, 180, 36, 18, '#000000aa'), text(warmth > 0.5 ? 'نور آفتابی ۳۰۰۰K' : 'نور مهتابی ۶۵۰۰K', 650, 458, { size: 18 });
-    caption('با هدست VR وارد یک خانهٔ مجازی می‌شوید.', time, 2.6, 5.4);
-    caption('چراغ‌های زانیس یکی‌یکی روشن می‌شوند و فضا را می‌بینید.', time, 5.6, 9);
-    caption('رنگ نور را عوض کنید: آفتابی یا مهتابی؟', time, 9.2, 13.2);
+  if (time < VR.povStart) {
+    // --- Outside view: the visitor lowers the headset onto their eyes.
+    booth(time);
+    const lower = easeInOut(span(time, 3.4, VR.headsetOn));
+    const headsetY = lerp(250, 371, lower);
+    const worn = lower >= 1;
+    person(640, 620, { shirt: COLOR.blue, headset: worn, handA: { x: 590, y: worn ? 470 : headsetY + 18 }, handB: { x: 690, y: worn ? 470 : headsetY + 18 } });
+    if (!worn) {
+      roundRect(600, headsetY, 80, 34, 10, '#1b2548', COLOR.blue);
+      glow(640, headsetY + 17, 46, COLOR.blue, 0.35);
+    }
+    roundRect(180, 300, 250, 190, 20, '#0b1020', COLOR.line);
+    text('ایستگاه VR', 305, 340, { size: 30, weight: 900, color: COLOR.gold });
+    text('خانهٔ مجازی زانیس', 305, 390, { size: 22, color: COLOR.muted });
+    text('۲ دقیقه برای هر نفر', 305, 440, { size: 20, color: COLOR.muted });
+    caption('بازدیدکننده هدست را روی چشمش می‌گذارد.', time, 2.6, 6.6);
+    caption('حالا ببینیم داخل هدست چه می‌بیند…', time, 6.7, 8);
+    // Blink to black just before the first-person view.
+    const blink = span(time, 7.4, VR.povStart);
+    if (blink > 0) quad([[0, 0], [WIDTH, 0], [WIDTH, HEIGHT], [0, HEIGHT]], '#000000', blink);
+  } else if (time < VR.arStart) {
+    // --- First-person view through the headset.
+    const local = time - VR.povStart;
+    const pan = Math.sin(local * 0.55) * 150 * (1 - span(time, VR.menuStart - 1, VR.menuStart) * 0.8);
+    const lightsOn = clamp((time - VR.lightsStart) / 1.3, 0, 3);
+    const warmth = time < VR.tempStart ? 0.15 : 0.15 + 0.85 * (0.5 - 0.5 * Math.cos(((time - VR.tempStart) / 2.6) * Math.PI));
+    povRoom(pan, lightsOn, warmth, time >= VR.select);
+    vrMenu(time);
+    if (time >= VR.tempStart) {
+      // Colour-temperature slider driven by the controller.
+      roundRect(390, 520, 500, 16, 8, '#000000aa', COLOR.line);
+      const knob = 390 + 500 * (1 - warmth);
+      const scale = c.createLinearGradient(390, 0, 890, 0);
+      scale.addColorStop(0, '#ffd9a0');
+      scale.addColorStop(1, '#dff1ff');
+      roundRect(392, 522, 496, 12, 6, scale);
+      glow(knob, 528, 26, COLOR.gold, 0.9);
+      text(warmth > 0.5 ? 'آفتابی ۳۰۰۰K' : 'مهتابی ۶۵۰۰K', 640, 486, { size: 26, weight: 900 });
+    }
+    headsetMask();
+    const fadeIn = 1 - span(time, VR.povStart, VR.povStart + 0.6);
+    const fadeOut = span(time, VR.povEnd, VR.arStart);
+    const black = Math.max(fadeIn, fadeOut);
+    if (black > 0) quad([[0, 0], [WIDTH, 0], [WIDTH, HEIGHT], [0, HEIGHT]], '#000000', black);
+    caption('داخل هدست: یک خانهٔ خاموش. با چرخاندن سر، دورتادور اتاق دیده می‌شود.', time, 8.4, 11.2);
+    caption('پنل‌های زانیس یکی‌یکی روشن می‌شوند و اتاق جان می‌گیرد.', time, 11.4, 15.3);
+    caption('با دسته، محصول را از منو انتخاب می‌کنید؛ همان لحظه روی سقف عوض می‌شود.', time, 15.6, 20.3);
+    caption('رنگ نور را هم امتحان کنید: آفتابی یا مهتابی؟', time, 20.6, 26.2);
   } else {
     // --- AR part: phone pointed at a bare ceiling; the product appears on the screen.
-    const appear = easeOut(span(time, 16, 17.2));
+    booth(time);
+    const arTime = time - VR.arStart;
+    const appear = easeOut(span(arTime, 3, 4.2));
     roundRect(120, 200, 420, 230, 20, '#1b2548', COLOR.line);
     text('سقف واقعی (خالی)', 330, 315, { size: 26, color: COLOR.muted });
     person(360, 620, { shirt: COLOR.orange, handA: { x: 560, y: 380 }, handB: { x: 640, y: 392 } });
-    // Phone
     c.save();
     c.translate(760, 350);
     c.rotate(-0.06);
@@ -381,12 +525,15 @@ function vrAr(time) {
       c.globalAlpha = 1;
     }
     c.restore();
-    if (appear > 0) roundRect(-120, 160, 240, 46, 23, COLOR.gold), text('پنل ۶۰×۶۰ زانیس', 0, 184, { size: 22, color: '#1a1300' });
+    if (appear > 0) {
+      roundRect(-140, 160, 280, 46, 23, COLOR.gold);
+      text('پنل مربع توکار ۶۰×۶۰ زانیس', 0, 184, { size: 20, color: '#1a1300' });
+    }
     c.restore();
     text('نمای دوربین گوشی', 760, 118, { size: 22, color: COLOR.blue });
-    caption('واقعیت افزوده: دوربین گوشی را رو به سقف بگیرید.', time, 13.8, 16.4);
-    caption('چراغ انتخابی روی سقف خودتان دیده می‌شود، پیش از خرید.', time, 16.6, 21);
-    caption('برای اجرا: هدست VR یا تبلت با قابلیت AR و محتوای سه‌بعدی محصولات لازم است.', time, 21.2, 24);
+    caption('واقعیت افزوده: دوربین گوشی را رو به سقف بگیرید.', time, VR.arStart + 0.4, VR.arStart + 3.2);
+    caption('چراغ انتخابی روی سقف خودتان دیده می‌شود، پیش از خرید.', time, VR.arStart + 3.4, VR.arStart + 7.4);
+    caption('برای اجرا: هدست VR یا تبلت با قابلیت AR و مدل سه‌بعدی محصولات لازم است.', time, VR.arStart + 7.6, 38);
   }
   titleCard('تجربهٔ VR و AR', 'نور زانیس را پیش از خرید ببینید', time);
 }
@@ -468,7 +615,7 @@ function installRace(time) {
 // ---------------------------------------------------------------- registry
 const SCENES = {
   'buzz-wire': { duration: 24, draw: buzzWire },
-  'vr-ar': { duration: 24, draw: vrAr },
+  'vr-ar': { duration: 38, draw: vrAr },
   'install-race': { duration: 24, draw: installRace },
 };
 
@@ -484,7 +631,7 @@ window.SCENES = Object.fromEntries(Object.entries(SCENES).map(([id, scene]) => [
 const params = new URLSearchParams(location.search);
 const previewScene = params.get('scene');
 if (previewScene && SCENES[previewScene]) {
-  document.fonts.ready.then(() => {
+  Promise.all([document.fonts.ready, window.assetsReady]).then(() => {
     if (params.has('t')) {
       window.renderFrame(previewScene, Number(params.get('t')));
       return;

@@ -1,12 +1,13 @@
-// Renders every scene in scenes.js to an MP4: headless Chrome draws each frame on the canvas,
-// the JPEG frames are piped to ffmpeg. Runs in CI (see .github/workflows/videos.yml).
+// Renders every scene in scenes.js to an MP4 with sound: headless Chrome draws each frame on the
+// canvas and synthesises the soundtrack (audio.js); ffmpeg encodes the frames and muxes the audio.
+// Runs in CI (see .github/workflows/videos.yml).
 //
 //   npm install --no-save puppeteer-core && node videos/render.mjs
 //   env: CHROME_PATH (default /usr/bin/google-chrome), FPS (default 30)
 
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer-core';
@@ -31,15 +32,18 @@ try {
   await page.evaluate(async () => {
     await Promise.all([document.fonts.load('700 32px Vazirmatn'), document.fonts.load('900 32px Vazirmatn')]);
     await document.fonts.ready;
+    await window.assetsReady;
   });
   const scenes = await page.evaluate(() => window.SCENES);
 
   for (const [sceneId, duration] of Object.entries(scenes)) {
     const output = path.join(outDir, `zanis-${sceneId}.mp4`);
+    const silent = path.join(outDir, `${sceneId}.silent.mp4`);
+    const soundtrack = path.join(outDir, `${sceneId}.wav`);
     const ffmpeg = spawn(
       'ffmpeg',
       ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
-        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', '-movflags', '+faststart', output],
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', silent],
       { stdio: ['pipe', 'inherit', 'inherit'] },
     );
     const frames = Math.round(duration * fps);
@@ -58,7 +62,18 @@ try {
     ffmpeg.stdin.end();
     const [exitCode] = await once(ffmpeg, 'close');
     if (exitCode !== 0) throw new Error(`ffmpeg failed for ${sceneId} (exit ${exitCode})`);
-    console.log(`rendered ${output} (${frames} frames)`);
+    writeFileSync(soundtrack, Buffer.from(await page.evaluate((id) => window.renderAudio(id), sceneId), 'base64'));
+    const mux = spawn(
+      'ffmpeg',
+      ['-y', '-loglevel', 'error', '-i', silent, '-i', soundtrack, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k',
+        '-shortest', '-movflags', '+faststart', output],
+      { stdio: 'inherit' },
+    );
+    const [muxExit] = await once(mux, 'close');
+    if (muxExit !== 0) throw new Error(`ffmpeg mux failed for ${sceneId} (exit ${muxExit})`);
+    rmSync(silent);
+    rmSync(soundtrack);
+    console.log(`rendered ${output} (${frames} frames, with sound)`);
   }
 } finally {
   await browser.close();
