@@ -371,6 +371,10 @@ function povRoom(pan, lightsOn, warmth, round) {
     if (round) c.ellipse(centerX, y + thick / 2, half * 0.62, thick * 0.62, 0, 0, Math.PI * 2);
     else c.roundRect(centerX - half, y, half * 2, thick, 8);
     c.fill();
+    // Outline, so a lit fixture still reads against the bright ceiling.
+    c.strokeStyle = on > 0 ? '#c79a2e' : '#2a3560';
+    c.lineWidth = 4;
+    c.stroke();
     if (on > 0) {
       quad([[centerX - half, y + thick], [centerX + half, y + thick], [centerX + half * 2.6, HEIGHT], [centerX - half * 2.6, HEIGHT]], lightColor, 0.16 * on);
       glow(centerX, y + thick / 2, half * 1.5, lightColor, 0.35 * on);
