@@ -1,0 +1,27 @@
+{
+  "name": "zanis-games-desktop",
+  "productName": "Zanis Games",
+  "version": "1.0.0",
+  "description": "Zanis booth games for Windows (the same web app as the Android build)",
+  "author": "alirezzazm",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "ir.zanis.games",
+    "productName": "Zanis Games",
+    "artifactName": "zanis-games-${version}-windows.exe",
+    "files": ["main.js", "preload.js", "web/**"],
+    "win": {
+      "target": "portable",
+      "icon": "icon.ico"
+    }
+  }
+}

@@ -3,7 +3,7 @@ name: Build APK
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'android/**', 'test/**', '.github/workflows/build.yml']
+    paths: ['web/**', 'android/**', 'desktop/**', 'test/**', '.github/workflows/build.yml']
   workflow_dispatch:
 
 concurrency:
@@ -144,3 +144,45 @@ jobs:
             ui.xml
             logcat.txt
           retention-days: 14
+
+  windows:
+    name: Windows app (portable exe)
+    needs: apk
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # attach the exe to the release the apk job created
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Bundle the web app and build
+        shell: bash
+        run: |
+          cp -r ../web web
+          npm version "$VERSION_NAME" --no-git-tag-version --allow-same-version
+          npm install --no-audit --no-fund
+          npx electron-builder --win portable --x64 --publish never
+          ls -la dist
+      - name: Smoke test (the app must start and report ready)
+        shell: pwsh
+        run: |
+          $env:ZANIS_SMOKE = '1'
+          $exe = Get-ChildItem dist/win-unpacked/*.exe | Select-Object -First 1
+          $process = Start-Process -FilePath $exe.FullName -Wait -PassThru
+          Write-Host "exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw 'the Windows app did not report ready' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zanis-games-windows
+          path: desktop/dist/*.exe
+          retention-days: 30
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v${VERSION_NAME}" dist/*.exe --clobber
