@@ -417,3 +417,17 @@ code.key {
     font-size: 22px;
   }
 }
+
+.qr {
+  display: flex;
+  justify-content: center;
+}
+.qr img {
+  background: #fff;
+  border-radius: 12px;
+  padding: 8px;
+}
+.small {
+  font-size: 12px;
+  word-break: break-all;
+}

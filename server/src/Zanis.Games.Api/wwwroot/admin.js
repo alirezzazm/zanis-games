@@ -107,6 +107,7 @@ function showLogin() {
 // ---------------------------------------------------------------- shell
 const TABS = [
   ['summary', 'خلاصه و برترین‌ها', summaryTab],
+  ['downloads', 'دانلود و QR', downloadsTab],
   ['settings', 'تنظیمات بازی', settingsTab],
   ['scores', 'همهٔ امتیازها', scoresTab],
   ['kiosks', 'دستگاه‌ها', kiosksTab],
@@ -168,6 +169,94 @@ async function summaryTab(content) {
     h('section.card', board),
   );
   await drawBoard();
+}
+
+// ---------------------------------------------------------------- downloads and QR codes
+async function downloadsTab(content) {
+  const megabytes = (bytes) => `${fa(Number((bytes / 1048576).toFixed(1)))} مگابایت`;
+  const absolute = (path) => new URL(path, location.origin).href;
+
+  /** Opens a page with just the QR code and its caption, ready to print for the booth. */
+  function printQr(target, title, caption) {
+    const page = window.open('', '_blank');
+    if (!page) return toast('پنجرهٔ چاپ باز نشد؛ اجازهٔ پاپ‌آپ را بدهید.', true);
+    page.document.write(`<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
+      <style>@font-face{font-family:V;src:url('/play/fonts/Vazirmatn_700Bold.ttf')}body{font-family:V,Tahoma,sans-serif;text-align:center;margin:40px}
+      img{width:min(90vw,520px)}h1{font-size:36px;margin:0 0 8px}p{font-size:20px;margin:8px 0}.u{direction:ltr;font-size:14px;color:#555}</style></head>
+      <body><h1>${title}</h1><p>${caption}</p><img src="/api/game/qr?target=${target}" alt=""><p class="u">${absolute(`/download/${target}`)}</p>
+      <script>document.querySelector('img').onload=()=>setTimeout(()=>print(),200)<\/script></body></html>`);
+    page.document.close();
+    return undefined;
+  }
+
+  function buildCard({ target, title, caption, file }) {
+    const url = absolute(file?.url ?? `/download/${target}`);
+    return h('section.card.stack.download',
+      h('h2', title),
+      h('p.muted', caption),
+      file
+        ? h('p', h('b', file.fileName), h('span.muted', ` — ${megabytes(file.size)}`))
+        : h('p.error', 'این فایل هنوز روی سرور نیامده است. «گرفتن نسخهٔ تازه» را بزنید.'),
+      h('div.actions',
+        file ? h('a.btn', { href: file.url, download: file.fileName }, 'دانلود') : null,
+        h('button.btn.secondary', { type: 'button', onclick: () => navigator.clipboard?.writeText(url).then(() => toast('لینک کپی شد')) }, 'کپی لینک'),
+      ),
+      h('div.qr', h('img', { src: `/api/game/qr?target=${target}`, alt: `QR ${title}`, width: 220, height: 220 })),
+      h('p.ltr.muted.small', url),
+      h('div.actions',
+        h('a.btn.secondary', { href: `/api/game/qr?target=${target}&format=png`, download: `zanis-qr-${target}.png` }, 'QR (PNG)'),
+        h('a.btn.secondary', { href: `/api/game/qr?target=${target}`, download: `zanis-qr-${target}.svg` }, 'QR (SVG)'),
+        h('button.btn.secondary', { type: 'button', onclick: () => printQr(target, title, caption) }, 'چاپ QR'),
+      ),
+    );
+  }
+
+  async function draw() {
+    const info = await fetch('/api/game/downloads', { cache: 'no-store' }).then((response) => response.json());
+    const refresh = h('button.btn.secondary', {
+      type: 'button',
+      onclick: async () => {
+        refresh.disabled = true;
+        refresh.textContent = 'در حال گرفتن… (تا چند دقیقه)';
+        try {
+          const result = await api('/downloads/refresh', { method: 'POST' });
+          toast(`نسخهٔ ${result.version ?? '؟'} روی سرور است.`);
+          await draw();
+        } catch (failure) {
+          toast(failure.message, true);
+          refresh.disabled = false;
+          refresh.textContent = 'گرفتن نسخهٔ تازه';
+        }
+      },
+    }, 'گرفتن نسخهٔ تازه');
+
+    content.replaceChildren(
+      h('section.card.stack',
+        h('div.row.between',
+          h('h2', info.version ? `نسخهٔ ${fa(info.version)}` : 'هنوز نسخه‌ای روی سرور نیست'),
+          refresh,
+        ),
+        h('p.muted', info.version
+          ? `منتشرشده: ${when(info.publishedAt)} · آخرین بررسی: ${when(info.checkedAt)}. سرور هر ۱۰ دقیقه خودش نسخهٔ تازه را از گیت‌هاب می‌گیرد.`
+          : 'سرور هر ۱۰ دقیقه آخرین نسخه را از گیت‌هاب می‌گیرد؛ برای گرفتن همین حالا دکمه را بزنید.'),
+        h('p.muted', 'لینک‌ها و QR کدها عمومی‌اند: بازدیدکننده بدون ورود به داشبورد، با اسکن QR فایل را دانلود می‌کند.'),
+      ),
+      h('div.levels',
+        buildCard({ target: 'android', title: 'اپ تمرین (اندروید)', caption: 'برای تمرین روی گوشی؛ امتیازی ثبت نمی‌شود.', file: info.android }),
+        buildCard({ target: 'windows', title: 'بازی مسابقه (ویندوز)', caption: 'برای رایانهٔ غرفه؛ قابل‌حمل، بدون نصب.', file: info.windows }),
+      ),
+      h('section.card.stack',
+        h('h2', 'تمرین در مرورگر'),
+        h('p.muted', 'بدون نصب، روی هر گوشی یا رایانه.'),
+        h('div.qr', h('img', { src: '/api/game/qr?target=play', alt: 'QR بازی در مرورگر', width: 180, height: 180 })),
+        h('div.actions',
+          h('a.btn.secondary', { href: '/play/', target: '_blank', rel: 'noopener' }, 'باز کردن'),
+          h('a.btn.secondary', { href: '/api/game/qr?target=play&format=png', download: 'zanis-qr-play.png' }, 'QR (PNG)'),
+        ),
+      ),
+    );
+  }
+  await draw();
 }
 
 // ---------------------------------------------------------------- game settings

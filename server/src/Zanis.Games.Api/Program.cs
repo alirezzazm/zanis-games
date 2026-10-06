@@ -30,6 +30,9 @@ builder.Services.AddSingleton<ScoreStore>();
 builder.Services.AddSingleton<KioskStore>();
 builder.Services.AddSingleton<AdminStore>();
 builder.Services.AddSingleton<TehranClock>();
+builder.Services.AddHttpClient(nameof(Downloads), Downloads.ConfigureClient);
+builder.Services.AddSingleton<Downloads>();
+builder.Services.AddHostedService<DownloadsRefresher>();
 
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddDataProtection().SetApplicationName("zanis-games");
@@ -116,6 +119,7 @@ app.UseAuthorization();
 app.MapGet("/healthz", (SettingsStore settings) => Results.Ok(new { status = "ok", settingsVersion = settings.Get().Version }));
 app.MapGameEndpoints();
 app.MapAdminEndpoints();
+app.MapDownloadEndpoints();
 
 app.Run();
 

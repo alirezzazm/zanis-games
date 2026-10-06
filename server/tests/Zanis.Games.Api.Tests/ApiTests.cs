@@ -19,6 +19,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("ZANIS_ADMIN_USERNAME", "admin");
         builder.UseSetting("ZANIS_ADMIN_PASSWORD", Password);
         builder.UseSetting("Zanis:LoginLimit", "1000");
+        builder.UseSetting("Zanis:ReleaseCheckMinutes", "0");
     }
 
     /// <summary>A client signed in to the dashboard (the cookie is kept by the handler).</summary>
@@ -40,6 +41,17 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("X-Kiosk-Key", body.GetProperty("key").GetString());
         return client;
+    }
+
+    /// <summary>Puts a fake mirrored release in the data folder, as the refresher would.</summary>
+    public void FakeRelease()
+    {
+        var folder = Path.Combine(directory, "downloads");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "zanis-games.apk"), [1, 2, 3, 4, 5]);
+        File.WriteAllText(
+            Path.Combine(folder, "release.json"),
+            """{"version":"1.0.99","publishedAt":"2026-10-06T10:00:00Z","checkedAt":"2026-10-06T10:00:00Z","android":{"fileName":"zanis-games-1.0.99.apk","size":5},"windows":null}""");
     }
 
     protected override void Dispose(bool disposing)
@@ -275,6 +287,51 @@ public sealed class FreshServerTests(ApiFactory factory) : IClassFixture<ApiFact
         Assert.Equal(15, settings.GetProperty("hardFromSecond").GetInt32());
         Assert.Equal(2, settings.GetProperty("hard").GetProperty("yellow").GetInt32());
         Assert.Equal(2, settings.GetProperty("points").GetProperty("yellow").GetInt32());
+    }
+}
+
+public sealed class DownloadTests(ApiFactory factory) : IClassFixture<ApiFactory>
+{
+    [Fact]
+    public async Task Builds_are_served_once_mirrored()
+    {
+        var client = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/download/android")).StatusCode);
+
+        factory.FakeRelease();
+        var info = await client.GetFromJsonAsync<JsonElement>("/api/game/downloads");
+        Assert.Equal("1.0.99", info.GetProperty("version").GetString());
+        Assert.Equal("/download/android", info.GetProperty("android").GetProperty("url").GetString());
+        Assert.Equal(JsonValueKind.Null, info.GetProperty("windows").ValueKind);
+
+        var apk = await client.GetAsync("/download/android");
+        Assert.Equal(HttpStatusCode.OK, apk.StatusCode);
+        Assert.Equal("application/vnd.android.package-archive", apk.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("zanis-games-1.0.99.apk", apk.Content.Headers.ContentDisposition?.FileNameStar ?? apk.Content.Headers.ContentDisposition?.FileName);
+        Assert.Equal(5, (await apk.Content.ReadAsByteArrayAsync()).Length);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/download/windows")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Qr_codes_point_only_at_the_games_pages()
+    {
+        var client = factory.CreateClient();
+        var svg = await client.GetAsync("/api/game/qr?target=windows");
+        Assert.Equal("image/svg+xml", svg.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("<svg", await svg.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var png = await client.GetByteArrayAsync("/api/game/qr?target=android&format=png");
+        Assert.Equal(new byte[] { 0x89, (byte)'P', (byte)'N', (byte)'G' }, png[..4]);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/game/qr?target=https://evil.example")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Only_the_dashboard_may_ask_for_a_fresh_copy()
+    {
+        var anonymous = factory.CreateClient();
+        anonymous.DefaultRequestHeaders.Add("X-Zanis-Admin", "1");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsync("/api/admin/downloads/refresh", null)).StatusCode);
     }
 }
 
