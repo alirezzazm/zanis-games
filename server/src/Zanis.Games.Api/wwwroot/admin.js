@@ -196,7 +196,7 @@ async function downloadsTab(content) {
       h('p.muted', caption),
       file
         ? h('p', h('b', file.fileName), h('span.muted', ` — ${megabytes(file.size)}`))
-        : h('p.error', 'این فایل هنوز روی سرور نیامده است. «گرفتن نسخهٔ تازه» را بزنید.'),
+        : h('p.error', 'این فایل هنوز روی سرور نیامده است؛ دریافتش از گیت‌هاب ممکن است چند دقیقه طول بکشد.'),
       h('div.actions',
         file ? h('a.btn', { href: file.url, download: file.fileName }, 'دانلود') : null,
         h('button.btn.secondary', { type: 'button', onclick: () => navigator.clipboard?.writeText(url).then(() => toast('لینک کپی شد')) }, 'کپی لینک'),
@@ -211,24 +211,32 @@ async function downloadsTab(content) {
     );
   }
 
+  let poll = 0;
   async function draw() {
+    clearTimeout(poll);
     const info = await fetch('/api/game/downloads', { cache: 'no-store' }).then((response) => response.json());
+    const busy = info.inProgress;
     const refresh = h('button.btn.secondary', {
       type: 'button',
+      disabled: Boolean(busy),
       onclick: async () => {
         refresh.disabled = true;
-        refresh.textContent = 'در حال گرفتن… (تا چند دقیقه)';
         try {
           const result = await api('/downloads/refresh', { method: 'POST' });
-          toast(`نسخهٔ ${result.version ?? '؟'} روی سرور است.`);
-          await draw();
+          toast(result.started ? 'بررسی گیت‌هاب شروع شد.' : 'یک دریافت از قبل در جریان است.');
+          setTimeout(draw, 1500);
         } catch (failure) {
           toast(failure.message, true);
           refresh.disabled = false;
-          refresh.textContent = 'گرفتن نسخهٔ تازه';
         }
       },
     }, 'گرفتن نسخهٔ تازه');
+    // While a file is on its way, follow its progress (only while this tab is open).
+    if (busy) {
+      poll = setTimeout(() => {
+        if (location.hash === '#downloads' && content.isConnected) draw();
+      }, 3000);
+    }
 
     content.replaceChildren(
       h('section.card.stack',
@@ -239,6 +247,9 @@ async function downloadsTab(content) {
         h('p.muted', info.version
           ? `منتشرشده: ${when(info.publishedAt)} · آخرین بررسی: ${when(info.checkedAt)}. سرور هر ۱۰ دقیقه خودش نسخهٔ تازه را از گیت‌هاب می‌گیرد.`
           : 'سرور هر ۱۰ دقیقه آخرین نسخه را از گیت‌هاب می‌گیرد؛ برای گرفتن همین حالا دکمه را بزنید.'),
+        busy
+          ? h('p', `در حال دریافت ${busy.fileName}: ${fa(Math.floor((busy.received / Math.max(1, busy.total)) * 100))}٪ (${megabytes(busy.received)} از ${megabytes(busy.total)})`)
+          : null,
         h('p.muted', 'لینک‌ها و QR کدها عمومی‌اند: بازدیدکننده بدون ورود به داشبورد، با اسکن QR فایل را دانلود می‌کند.'),
       ),
       h('div.levels',

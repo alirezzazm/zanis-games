@@ -12,7 +12,13 @@ public static class DownloadEndpoints
 {
     public sealed record DownloadInfo(string FileName, long Size, string Url);
 
-    public sealed record DownloadsResponse(string? Version, DateTimeOffset? PublishedAt, DateTimeOffset? CheckedAt, DownloadInfo? Android, DownloadInfo? Windows);
+    public sealed record DownloadsResponse(
+        string? Version,
+        DateTimeOffset? PublishedAt,
+        DateTimeOffset? CheckedAt,
+        DownloadInfo? Android,
+        DownloadInfo? Windows,
+        DownloadProgress? InProgress);
 
     /// <summary>What a QR code may point at: only the game's own public pages and files.</summary>
     private static readonly Dictionary<string, string> QrTargets = new(StringComparer.OrdinalIgnoreCase)
@@ -24,7 +30,7 @@ public static class DownloadEndpoints
 
     public static void MapDownloadEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/game/downloads", (Downloads downloads) => Describe(downloads.Current())).RequireCors(GameEndpoints.CorsPolicy);
+        app.MapGet("/api/game/downloads", (Downloads downloads) => Describe(downloads.Current(), downloads.InProgress)).RequireCors(GameEndpoints.CorsPolicy);
 
         app.MapGet("/download/android", (Downloads downloads) =>
             Serve(downloads, Downloads.AndroidFile, set => set.Android, "application/vnd.android.package-archive"));
@@ -51,29 +57,21 @@ public static class DownloadEndpoints
             return Results.Text(svg, "image/svg+xml");
         });
 
-        app.MapPost("/api/admin/downloads/refresh", async (Downloads downloads, CancellationToken cancellationToken) =>
-            {
-                try
-                {
-                    return Results.Ok(Describe(await downloads.RefreshAsync(cancellationToken)));
-                }
-                catch (Exception exception) when (exception is HttpRequestException or IOException or TaskCanceledException or System.Text.Json.JsonException)
-                {
-                    return Results.Json(
-                        new ApiError("release_unreachable", $"گرفتن نسخهٔ تازه از گیت‌هاب نشد: {exception.Message}"),
-                        statusCode: StatusCodes.Status502BadGateway);
-                }
-            })
+        // Starts the check in the background (a large file may take many minutes); the dashboard
+        // then follows inProgress in /api/game/downloads.
+        app.MapPost("/api/admin/downloads/refresh", (Downloads downloads) =>
+                Results.Ok(new { started = downloads.StartRefresh() }))
             .RequireAuthorization(AdminAuth.Policy)
             .AddEndpointFilter(AdminAuth.RequireCsrfHeader);
     }
 
-    private static DownloadsResponse Describe(DownloadSet? set) => new(
+    private static DownloadsResponse Describe(DownloadSet? set, DownloadProgress? inProgress) => new(
         set?.Version,
         set?.PublishedAt,
         set?.CheckedAt,
         set?.Android is { } android ? new DownloadInfo(android.FileName, android.Size, "/download/android") : null,
-        set?.Windows is { } windows ? new DownloadInfo(windows.FileName, windows.Size, "/download/windows") : null);
+        set?.Windows is { } windows ? new DownloadInfo(windows.FileName, windows.Size, "/download/windows") : null,
+        inProgress);
 
     private static IResult Serve(Downloads downloads, string fileName, Func<DownloadSet, DownloadFile?> pick, string contentType)
     {
