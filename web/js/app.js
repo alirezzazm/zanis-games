@@ -55,7 +55,7 @@ const signed = (value) => `⁦${value > 0 ? '+' : '−'}${fa(Math.abs(value))}�
 
 /** The rules card, written from the current settings. */
 function rulesCard(settings) {
-  const { points, stages } = settings;
+  const { points } = settings;
   const sample = (className, image) =>
     h(`span.lamp.sample.${className}`, h('img', { src: image, alt: '', draggable: false }), h('span.no', '✕'));
   const lines = [
@@ -66,9 +66,11 @@ function rulesCard(settings) {
   const extra = [];
   if (points.empty) extra.push(`زدن خانهٔ خاموش ${signed(points.empty)}`);
   if (points.missed) extra.push(`چراغ زردی که از دست برود ${signed(points.missed)}`);
-  const most = stages.reduce((acc, stage) => ({ yellow: Math.max(acc.yellow, stage.yellow), red: Math.max(acc.red, stage.red) }), { yellow: 0, red: 0 });
-  const pace = [`${fa(settings.roundSeconds)} ثانیه وقت داری و بازی مدام سریع‌تر می‌شود`];
-  if (most.yellow > 1 || most.red > 1) pace.push('کم‌کم چند چراغ با هم روشن می‌شود');
+  const pace = [`${fa(settings.roundSeconds)} ثانیه وقت داری`];
+  if (settings.hardFromSecond > 0) {
+    const more = settings.hard.yellow > 1 || settings.hard.red > 1 ? ' و چند چراغ با هم روشن می‌شود' : '';
+    pace.push(`از ثانیهٔ ${fa(settings.hardFromSecond)} بازی سریع‌تر می‌شود${more}`);
+  }
   return h('div.card.stack.rules',
     ...lines,
     h('p.muted', `${pace.join('؛ ')}.${extra.length ? ` ${extra.join('، ')}.` : ''}`),

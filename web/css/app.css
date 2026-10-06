@@ -484,6 +484,40 @@ canvas {
     opacity: 1;
   }
 }
+.level-banner {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px 30px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--red), #c4001f);
+  color: #fff;
+  font-size: 34px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 0 50px #ff2d4a99;
+  pointer-events: none;
+  z-index: 5;
+}
+.level-banner.show {
+  animation: banner 1.4s ease forwards;
+}
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  15%,
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
 .hud.hurry .pill:last-child b {
   color: var(--red);
 }

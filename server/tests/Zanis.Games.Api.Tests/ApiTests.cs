@@ -110,11 +110,8 @@ public sealed class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var settings = GameSettings.Default with
         {
             RoundSeconds = 45,
-            Stages =
-            [
-                new StageSettings { FromSecond = 0, Yellow = 1, Red = 0, RedChance = 0 },
-                new StageSettings { FromSecond = 15, Yellow = 2, Red = 2, RedChance = 60 },
-            ],
+            HardFromSecond = 20,
+            Hard = new LevelSettings { VisibleMs = 600, Yellow = 2, Red = 2, RedChance = 60 },
         };
 
         var saved = await admin.PutAsJsonAsync("/api/admin/settings", new { settings, expectedVersion = version });
@@ -123,7 +120,8 @@ public sealed class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var game = await factory.CreateClient().GetFromJsonAsync<JsonElement>("/api/game/settings");
         Assert.Equal(version + 1, game.GetProperty("version").GetInt32());
         Assert.Equal(45, game.GetProperty("settings").GetProperty("roundSeconds").GetInt32());
-        Assert.Equal(60, game.GetProperty("settings").GetProperty("stages")[1].GetProperty("redChance").GetInt32());
+        Assert.Equal(20, game.GetProperty("settings").GetProperty("hardFromSecond").GetInt32());
+        Assert.Equal(60, game.GetProperty("settings").GetProperty("hard").GetProperty("redChance").GetInt32());
 
         // A save based on an old version is refused instead of overwriting.
         var stale = await admin.PutAsJsonAsync("/api/admin/settings", new { settings, expectedVersion = version });
@@ -136,22 +134,18 @@ public sealed class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var admin = await factory.AdminAsync();
         var settings = GameSettings.Default with
         {
-            RoundSeconds = 5,
-            StartVisibleMs = 400,
-            EndVisibleMs = 900,
+            RoundSeconds = 20,
+            HardFromSecond = 25,
             LampCount = 4,
-            Stages =
-            [
-                new StageSettings { FromSecond = 2, Yellow = 3, Red = 3, RedChance = 50 },
-            ],
+            Normal = new LevelSettings { VisibleMs = 50, Yellow = 1, Red = 0, RedChance = 0 },
+            Hard = new LevelSettings { VisibleMs = 600, Yellow = 3, Red = 3, RedChance = 50 },
         };
         var response = await admin.PutAsJsonAsync("/api/admin/settings", new { settings });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var errors = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
-        Assert.True(errors.TryGetProperty("roundSeconds", out _));
-        Assert.True(errors.TryGetProperty("endVisibleMs", out _));
-        Assert.True(errors.TryGetProperty("stages[0].fromSecond", out _));
-        Assert.True(errors.TryGetProperty("stages[0].red", out _));
+        Assert.True(errors.TryGetProperty("hardFromSecond", out _));
+        Assert.True(errors.TryGetProperty("normal.visibleMs", out _));
+        Assert.True(errors.TryGetProperty("hard.red", out _));
     }
 
     [Fact]
@@ -278,7 +272,8 @@ public sealed class FreshServerTests(ApiFactory factory) : IClassFixture<ApiFact
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var settings = body.GetProperty("settings");
         Assert.Equal(30, settings.GetProperty("roundSeconds").GetInt32());
-        Assert.Equal(3, settings.GetProperty("stages").GetArrayLength());
+        Assert.Equal(15, settings.GetProperty("hardFromSecond").GetInt32());
+        Assert.Equal(2, settings.GetProperty("hard").GetProperty("yellow").GetInt32());
         Assert.Equal(2, settings.GetProperty("points").GetProperty("yellow").GetInt32());
     }
 }

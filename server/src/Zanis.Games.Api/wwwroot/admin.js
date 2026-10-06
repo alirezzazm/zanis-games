@@ -200,48 +200,22 @@ async function settingsTab(content) {
   const timeline = h('div.timeline');
   function drawTimeline() {
     const total = Math.max(1, model.roundSeconds);
-    const stages = [...model.stages].sort((a, b) => a.fromSecond - b.fromSecond);
-    timeline.replaceChildren(
-      h('div.bar', stages.map((stage, index) => {
-        const end = stages[index + 1]?.fromSecond ?? total;
-        const width = Math.max(0, Math.min(end, total) - Math.min(stage.fromSecond, total)) / total * 100;
-        return h('div.seg-stage', { style: { width: `${width}%` }, title: `از ثانیهٔ ${stage.fromSecond}` },
-          h('b', `${fa(stage.fromSecond)}″`),
-          h('span', `${fa(stage.yellow)} زرد`),
-          h('span.red', stage.red ? `تا ${fa(stage.red)} قرمز · ${fa(stage.redChance)}٪` : 'بدون قرمز'),
-        );
-      })),
-      h('p.muted', `هر موج اول ${fa(seconds(model.startVisibleMs))} ثانیه روشن می‌ماند و تا پایان بازی (${fa(total)} ثانیه) کم‌کم به ${fa(seconds(model.endVisibleMs))} ثانیه می‌رسد.`),
-    );
-  }
-
-  const stagesBody = h('tbody');
-  function drawStages() {
-    stagesBody.replaceChildren(...model.stages.map((stage, index) => {
-      const cell = (key, min, max) => {
-        const input = h('input', {
-          type: 'number', min, max, dir: 'ltr', value: stage[key],
-          oninput: () => {
-            stage[key] = Math.round(Number(input.value));
-            drawTimeline();
-          },
-        });
-        const error = h('div.error');
-        errors.set(`stages[${index}].${key}`, error);
-        return h('td', input, error);
-      };
-      const rowError = h('div.error');
-      errors.set(`stages[${index}]`, rowError);
-      return h('tr',
-        cell('fromSecond', 0, 299),
-        cell('yellow', 1, 6),
-        cell('red', 0, 6),
-        cell('redChance', 0, 100),
-        h('td', model.stages.length > 1
-          ? h('button.btn.ghost', { type: 'button', 'aria-label': 'حذف مرحله', onclick: () => { model.stages.splice(index, 1); drawStages(); drawTimeline(); } }, '✕')
-          : null, rowError),
+    const switchAt = Math.min(Math.max(0, model.hardFromSecond), total);
+    const part = (className, title, level, from, to) =>
+      h(`div.seg-stage.${className}`, { style: { width: `${((to - from) / total) * 100}%` } },
+        h('b', `${title} · ${fa(from)} تا ${fa(to)} ثانیه`),
+        h('span', `${fa(level.yellow)} زرد · هر موج ${fa(seconds(level.visibleMs))} ثانیه`),
+        h('span.red', level.red ? `تا ${fa(level.red)} قرمز · ${fa(level.redChance)}٪` : 'بدون قرمز'),
       );
-    }));
+    timeline.replaceChildren(
+      h('div.bar',
+        switchAt > 0 ? part('normal', 'عادی', model.normal, 0, switchAt) : null,
+        switchAt < total ? part('hard', 'سخت', model.hard, switchAt, total) : null,
+      ),
+      h('p.muted', switchAt > 0
+        ? `بازی دقیقاً در ثانیهٔ ${fa(switchAt)} یک بار سخت‌تر می‌شود و تا آخر همان‌طور می‌ماند.`
+        : 'بازی از اول در حالت سخت است.'),
+    );
   }
 
   const status = h('p.muted');
@@ -258,7 +232,6 @@ async function settingsTab(content) {
         onsubmit: async (event) => {
           event.preventDefault();
           errors.forEach((element) => (element.textContent = ''));
-          model.stages.sort((a, b) => a.fromSecond - b.fromSecond);
           save.disabled = true;
           try {
             const saved = await api('/settings', { method: 'PUT', body: { settings: model, expectedVersion: version } });
@@ -278,45 +251,38 @@ async function settingsTab(content) {
               }
             }
             toast(shown ? 'بعضی مقدارها درست نیست؛ پیام قرمز زیر هر کدام را ببینید.' : failure.message, true);
-            if (!shown) drawStages();
           } finally {
             save.disabled = false;
           }
         },
       },
       h('section.card.stack',
-        h('h2', 'زمان و سرعت'),
+        h('h2', 'زمان'),
         h('div.grid',
           numberField('roundSeconds', 'زمان هر دور (ثانیه)', 'مدت یک دور مسابقه.', { min: 10, max: 300 }),
-          numberField('startVisibleMs', 'روشن ماندن در شروع (ثانیه)', 'هر موج چراغ در ابتدای بازی چقدر روشن می‌ماند.', { min: 200, max: 5000, step: 0.05, scale: 1000 }),
-          numberField('endVisibleMs', 'روشن ماندن در پایان (ثانیه)', 'کمتر از شروع؛ بازی کم‌کم به این سرعت می‌رسد.', { min: 150, max: 5000, step: 0.05, scale: 1000 }),
+          numberField('hardFromSecond', 'از ثانیهٔ چند سخت‌تر شود', 'بازی فقط یک بار، دقیقاً در همین ثانیه، به حالت سخت می‌رود. ۰ یعنی از اول سخت.', { min: 0, max: 299 }),
           numberField('gapMs', 'مکث بین موج‌ها (ثانیه)', 'تاریکی کوتاه بین دو موج.', { min: 0, max: 2000, step: 0.05, scale: 1000 }),
           numberField('lampCount', 'تعداد چراغ‌ها (محصولات)', 'بین ۴ تا ۲۴.', { min: 4, max: 24 }),
         ),
-      ),
-      h('section.card.stack',
-        h('div.row.between',
-          h('h2', 'مرحله‌ها: چند چراغ با هم'),
-          h('button.btn.secondary', {
-            type: 'button',
-            disabled: model.stages.length >= 10,
-            onclick: () => {
-              const last = model.stages[model.stages.length - 1];
-              model.stages.push({ ...last, fromSecond: Math.min(model.roundSeconds - 1, last.fromSecond + 5) });
-              drawStages();
-              drawTimeline();
-            },
-          }, '+ مرحلهٔ جدید'),
-        ),
-        h('p.muted', 'از ثانیهٔ هر مرحله به بعد، این تعداد چراغ زرد با هم روشن می‌شود و تا «بیشترین قرمز» چراغ قرمز هم کنارشان می‌آید؛ هر قرمز با «شانس قرمز» درمی‌آید. مرحلهٔ اول از ثانیهٔ ۰ است.'),
-        h('div.table-wrap',
-          h('table.stages',
-            h('thead', h('tr', h('th', 'از ثانیهٔ'), h('th', 'چراغ زرد هم‌زمان'), h('th', 'بیشترین قرمز'), h('th', 'شانس قرمز (٪)'), h('th', ''))),
-            stagesBody,
-          ),
-        ),
-        errors.set('stages', h('div.error')).get('stages'),
         timeline,
+      ),
+      h('div.levels',
+        h('section.card.stack',
+          h('h2', 'حالت عادی'),
+          h('p.muted', 'از شروع بازی تا ثانیهٔ سخت شدن.'),
+          numberField('normal.visibleMs', 'روشن ماندن هر موج (ثانیه)', 'کمتر = سریع‌تر.', { min: 150, max: 5000, step: 0.05, scale: 1000 }),
+          numberField('normal.yellow', 'چراغ زرد هم‌زمان', 'بین ۱ تا ۶.', { min: 1, max: 6 }),
+          numberField('normal.red', 'بیشترین چراغ قرمز هم‌زمان', '۰ یعنی بدون قرمز.', { min: 0, max: 6 }),
+          numberField('normal.redChance', 'شانس آمدن هر قرمز (٪)', 'بین ۰ تا ۱۰۰.', { min: 0, max: 100 }),
+        ),
+        h('section.card.stack',
+          h('h2', 'حالت سخت'),
+          h('p.muted', 'از ثانیهٔ سخت شدن تا پایان بازی.'),
+          numberField('hard.visibleMs', 'روشن ماندن هر موج (ثانیه)', 'کمتر = سریع‌تر.', { min: 150, max: 5000, step: 0.05, scale: 1000 }),
+          numberField('hard.yellow', 'چراغ زرد هم‌زمان', 'بین ۱ تا ۶.', { min: 1, max: 6 }),
+          numberField('hard.red', 'بیشترین چراغ قرمز هم‌زمان', '۰ یعنی بدون قرمز.', { min: 0, max: 6 }),
+          numberField('hard.redChance', 'شانس آمدن هر قرمز (٪)', 'بین ۰ تا ۱۰۰.', { min: 0, max: 100 }),
+        ),
       ),
       h('section.card.stack',
         h('h2', 'امتیازها'),
@@ -352,7 +318,6 @@ async function settingsTab(content) {
       status,
     );
     content.replaceChildren(form);
-    drawStages();
     drawTimeline();
     showStatus();
   }

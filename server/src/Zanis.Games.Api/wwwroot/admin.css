@@ -331,8 +331,10 @@ td.ltr,
 tr.dim td {
   opacity: 0.5;
 }
-table.stages input {
-  width: 100px;
+.levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
 }
 .pager {
   justify-content: center;
@@ -359,8 +361,8 @@ table.stages input {
   background: linear-gradient(180deg, #ffc21a26, #ffc21a10);
   border-left: 1px solid var(--line);
 }
-.seg-stage:nth-child(even) {
-  background: linear-gradient(180deg, #ffc21a40, #ffc21a1a);
+.seg-stage.hard {
+  background: linear-gradient(180deg, #ff5a6a40, #ff5a6a1a);
 }
 .seg-stage .red {
   color: var(--red);
