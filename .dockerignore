@@ -7,4 +7,4 @@ test
 node_modules
 **/bin
 **/obj
-server/**/data
+server/**/.data

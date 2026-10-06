@@ -18,7 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton(services =>
 {
     var configured = services.GetRequiredService<IConfiguration>()["Zanis:DataDirectory"];
-    var directory = configured ?? Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, "data");
+    var directory = configured ?? Path.Combine(services.GetRequiredService<IWebHostEnvironment>().ContentRootPath, ".data");
     Directory.CreateDirectory(Path.Combine(directory, "keys"));
     return new DataDirectory(directory);
 });

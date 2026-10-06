@@ -12,4 +12,4 @@ desktop/web/
 desktop/dist/
 server/**/bin/
 server/**/obj/
-server/**/data/
+server/**/.data/
