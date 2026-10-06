@@ -71,7 +71,13 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                Log.e(LOG_TAG, "load failed: " + request.getUrl() + " — " + error.getDescription());
+                // Only the bundled pages must always load; the game server may be unreachable (no
+                // internet at the booth), which the game handles by itself.
+                if (APP_HOST.equals(request.getUrl().getHost())) {
+                    Log.e(LOG_TAG, "load failed: " + request.getUrl() + " — " + error.getDescription());
+                } else {
+                    Log.w(LOG_TAG, "server unreachable: " + request.getUrl() + " — " + error.getDescription());
+                }
             }
         });
 
