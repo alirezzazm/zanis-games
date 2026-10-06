@@ -12,6 +12,8 @@ services:
     env_file: /opt/zanis-games/.env
     environment:
       TZ: Asia/Tehran
+      # The address the QR codes in the dashboard point at.
+      Zanis__PublicUrl: https://zgp.game.aliizz.ir
     ports:
       - 127.0.0.1:18300:8080
     volumes:
