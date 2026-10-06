@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Zanis.Games.Api/Zanis.Games.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Zanis.Games.Api.Tests/Zanis.Games.Api.Tests.csproj" />
+  </Folder>
+</Solution>

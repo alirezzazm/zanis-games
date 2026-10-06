@@ -1,0 +1,28 @@
+# The game server on the host (see server/README.md). The dashboard account and nothing else
+# secret comes from /opt/zanis-games/.env; all data lives in the zanis-games-data volume.
+name: zanis-games
+
+services:
+  api:
+    image: zanis-games:latest
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    env_file: /opt/zanis-games/.env
+    environment:
+      TZ: Asia/Tehran
+    ports:
+      - 127.0.0.1:18300:8080
+    volumes:
+      - data:/data
+    mem_limit: 300m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  data:
+    name: zanis-games-data

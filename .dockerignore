@@ -1,0 +1,10 @@
+.git
+.github
+android
+desktop
+videos
+test
+node_modules
+**/bin
+**/obj
+server/**/data

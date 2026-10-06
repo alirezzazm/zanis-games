@@ -10,3 +10,6 @@ node_modules/
 videos/out/
 desktop/web/
 desktop/dist/
+server/**/bin/
+server/**/obj/
+server/**/data/
