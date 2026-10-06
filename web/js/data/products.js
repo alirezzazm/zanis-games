@@ -1,4 +1,4 @@
-// Real products from the Zanis catalogue (https://zaniselec.com), used by the memory game and the quiz.
+// Real products from the Zanis catalogue (https://zaniselec.com): the lamps of the lights game.
 // Names are exactly as published on the site; photos are resized copies of the site's product images.
 // To add a product: put a square image in web/img/products/ and add a line here.
 
@@ -31,19 +31,10 @@ export const PRODUCTS = [
   { id: 'tape', name: 'چسب برق', family: 'لوازم جانبی', image: 'img/products/tape.webp' },
 ];
 
-export const productById = (id) => PRODUCTS.find((product) => product.id === id) ?? null;
-
-/** Photo of the product a prize (or passport station) stands for; undefined for non-product prizes. */
-export const prizeImage = (item) => productById(item?.productId)?.image;
-
-/** Products that give light: used where a game needs "a lamp" (circuit, photo frame). */
-const LIGHT_FAMILIES = ['لامپ', 'هالوژن', 'پنل گرد', 'پنل مربع', 'پروژکتور', 'براکت', 'دکوراتیو'];
-export const LIGHT_PRODUCTS = PRODUCTS.filter((product) => LIGHT_FAMILIES.includes(product.family));
-
 const svg = (body) =>
   `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 
-/** The Zanis mark: a stylised "Z" drawn as a light beam. Used on tiles and card backs. */
+/** The Zanis mark: a stylised "Z" drawn as a light beam. */
 export const BRAND_MARK = svg(
   `<path d="M16 14h32L18 50h30" stroke="#1a1300" stroke-width="7"/><circle cx="48" cy="14" r="4" fill="#fff"/>`,
 );

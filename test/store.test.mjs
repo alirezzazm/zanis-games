@@ -1,73 +1,80 @@
-// Booth store: sign-in, best scores, prize stock and the per-visitor limit on chance games.
+// Device store and score sync: rounds are queued, sent once, and the bar works offline.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 const memory = new Map();
 globalThis.localStorage = { getItem: (key) => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value) };
+globalThis.location = { protocol: 'https:', pathname: '/', origin: 'https://example.test' };
 const { store } = await import('../web/js/core/store.js');
-const { normalizePhone, fa, toLatinDigits } = await import('../web/js/core/util.js').catch(() => ({}));
+const sync = await import('../web/js/core/sync.js');
+const { normalizePhone } = await import('../web/js/core/util.js');
 
-test('keeps the best score per game and totals them', () => {
-  store.signIn('علی', '09121234567');
-  assert.equal(store.recordScore('quiz', 40), true);
-  assert.equal(store.recordScore('quiz', 25), false);
-  store.recordScore('memory', 80);
-  assert.equal(store.totalScore(store.currentPlayer()), 120);
-  assert.equal(store.leaderboard()[0].score, 120);
+const counts = { yellow: 10, red: 1, empty: 2, missed: 3 };
+const offline = async () => {
+  throw new TypeError('Failed to fetch');
+};
+
+test('a finished round is kept and queued for the server', () => {
+  const round = store.recordRound({ name: 'مریم احمدی', phone: '09121234567', score: 17, counts, settingsVersion: 4 });
+  assert.equal(round.hits, 10);
+  assert.equal(round.redTaps, 1);
+  assert.equal(store.state.pending.length, 1);
+  assert.equal(store.playsOf('09121234567'), 1);
+  assert.match(store.exportCsv(), /"مریم احمدی",09121234567,17,10,1,2,3,.*,no/);
 });
 
-test('one prize round per chance game; later rounds are practice and leave the stock alone', () => {
-  assert.equal(store.hasPrizeRound('wheel'), true);
-  const before = store.state.prizes.map((prize) => prize.stock);
-  const prize = store.drawPrize('wheel');
-  assert.equal(store.hasPrizeRound('wheel'), false);
-  const index = store.state.prizes.findIndex((candidate) => candidate.id === prize.id);
-  assert.equal(store.state.prizes[index].stock, before[index] > 0 ? before[index] - 1 : before[index]);
-
-  const stockAfterPrizeRound = store.state.prizes.map((candidate) => candidate.stock);
-  const prizesWon = store.currentPlayer().prizes.length;
-  for (let round = 0; round < 20; round++) store.drawPrize('wheel', { practice: true });
-  assert.deepEqual(store.state.prizes.map((candidate) => candidate.stock), stockAfterPrizeRound);
-  assert.equal(store.currentPlayer().prizes.length, prizesWon);
-
-  store.updateSettings({ prizeRoundsPerVisitor: 0 });
-  assert.equal(store.hasPrizeRound('wheel'), true, '0 means unlimited prize rounds');
-  store.updateSettings({ prizeRoundsPerVisitor: 1 });
+test('queued rounds are sent with the kiosk key, once, and the receipt gives the rank', async () => {
+  store.updateBooth({ serverUrl: 'https://games.example.test/', kioskKey: 'zk_test' });
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, status: 201, json: async () => ({ rank: 2, best: 17, plays: 1 }) };
+  };
+  const round = store.recordRound({ name: 'علی', phone: '09351112233', score: 9, counts, settingsVersion: 4 });
+  const receipt = await sync.submitRound(round);
+  assert.equal(receipt.rank, 2);
+  assert.equal(calls.length, 2, 'the earlier queued round is sent too');
+  assert.equal(calls[0].url, 'https://games.example.test/api/kiosk/scores');
+  assert.equal(calls[0].init.headers['X-Kiosk-Key'], 'zk_test');
+  assert.equal(store.state.pending.length, 0);
 });
 
-test('a prize with no stock left is never drawn', () => {
-  store.state.prizes.forEach((prize) => store.updatePrize(prize.id, { stock: prize.id === 'tape' ? 5 : 0 }));
-  for (let draw = 0; draw < 5; draw++) assert.equal(store.drawPrize('scratch').id, 'tape');
-  // Nothing left: the games fall back to a single empty slot instead of crashing.
-  assert.deepEqual(
-    store.availablePrizes().map((prize) => prize.id),
-    ['none'],
-  );
-  assert.equal(store.drawPrize('plinko').empty, true);
+test('offline rounds stay queued; a rejected key stops the queue', async () => {
+  globalThis.fetch = offline;
+  const round = store.recordRound({ name: 'سارا', phone: '09191234567', score: 3, counts, settingsVersion: 4 });
+  assert.equal(await sync.submitRound(round), null);
+  assert.equal(store.state.pending.length, 1);
+  assert.equal(sync.status.online, false);
+
+  globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ message: 'bad key' }) });
+  await sync.flushPending();
+  assert.equal(store.state.pending.length, 1);
+  assert.equal(sync.status.keyRejected, true);
 });
 
-test('CSV export has one row per visitor and escapes quotes', () => {
-  store.signIn('رضا "برق"', '09350000000');
-  const lines = store.exportCsv().split('\n');
-  assert.equal(lines.length, 3);
-  assert.match(lines[2], /"رضا ""برق"""/);
+test('the scrolling bar falls back to this device with short names', async () => {
+  globalThis.fetch = offline;
+  const { top, recent } = await sync.fetchTicker();
+  assert.equal(recent[0].name, 'سارا');
+  assert.deepEqual(top[0], { name: 'مریم ا.', score: 17 });
+  assert.ok(!JSON.stringify({ top, recent }).includes('0912'), 'no phone numbers on screen');
 });
 
-test('phone and digit helpers', { skip: !normalizePhone }, () => {
+test('downloaded settings are normalised before use', async () => {
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ version: 5, updatedAt: '2026-10-06T10:00:00Z', settings: { roundSeconds: 45, lampCount: 1000 } }),
+  });
+  assert.equal(await sync.refreshSettings(), true);
+  const settings = sync.currentSettings();
+  assert.equal(settings.roundSeconds, 45);
+  assert.equal(settings.lampCount, 24);
+  assert.equal(store.remote.version, 5);
+});
+
+test('mobile numbers are normalised from Persian digits', () => {
   assert.equal(normalizePhone('۰۹۱۲ ۱۲۳ ۴۵۶۷'), '09121234567');
-  assert.equal(normalizePhone('+98 912 123 4567'), '09121234567');
-  assert.equal(normalizePhone('12345'), null);
-  assert.equal(fa(1234567), '۱٬۲۳۴٬۵۶۷');
-  assert.equal(toLatinDigits('٣۴'), '34');
-});
-
-test('a new CONFIG_VERSION replaces saved prizes and stations but keeps visitors', async () => {
-  const saved = JSON.parse(memory.get('zanis-games-v1'));
-  saved.configVersion = 0;
-  saved.prizes = [{ id: 'old', label: 'old prize', short: 'old', color: '#000', weight: 1, stock: 3 }];
-  memory.set('zanis-games-v1', JSON.stringify(saved));
-  const { store: reloaded } = await import('../web/js/core/store.js?reload=1');
-  assert.ok(reloaded.state.prizes.some((prize) => prize.id === 'bulb12'));
-  assert.ok(!reloaded.state.prizes.some((prize) => prize.id === 'old'));
-  assert.ok(reloaded.state.players['09121234567'], 'visitors survive the config update');
+  assert.equal(normalizePhone('+989121234567'), '09121234567');
+  assert.equal(normalizePhone('0912'), null);
 });

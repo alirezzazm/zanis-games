@@ -1,24 +1,14 @@
 package ir.zanis.games;
 
-import android.Manifest;
 import android.app.Activity;
-import android.content.ContentValues;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.provider.MediaStore;
-import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
-import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -26,30 +16,23 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
-
 /**
- * Hosts the booth games (a web app bundled in assets/www) in a full-screen WebView.
+ * Hosts the practice version of the lights game (a web app bundled in assets/www) in a full-screen
+ * WebView.
  *
- * The assets are served through WebViewAssetLoader from a virtual https origin, because the camera
- * (getUserMedia) is only available to pages in a secure context; file:// URLs are not one.
+ * The assets are served through WebViewAssetLoader from a virtual https origin: ES modules do not
+ * load from file:// URLs, and an https page may call the game server for the current settings.
  */
 public class MainActivity extends Activity {
 
     private static final String APP_HOST = "appassets.androidplatform.net";
     private static final String START_URL = "https://" + APP_HOST + "/assets/www/index.html";
-    private static final int CAMERA_REQUEST = 1;
     private static final String LOG_TAG = "ZanisGames";
 
     private WebView webView;
-    /** A camera request from the page that is waiting for the runtime permission dialog. */
-    private PermissionRequest pendingCameraRequest;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,7 +65,7 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // The app is fully offline: never navigate away from the bundled pages.
+                // Never navigate away from the bundled pages (the game server is only called with fetch).
                 return !APP_HOST.equals(request.getUrl().getHost());
             }
 
@@ -93,11 +76,6 @@ public class MainActivity extends Activity {
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onPermissionRequest(PermissionRequest request) {
-                runOnUiThread(() -> handlePermissionRequest(request));
-            }
-
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
                 // Surface page messages in logcat; they are the only trace of a JavaScript failure on a
@@ -121,41 +99,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void handlePermissionRequest(PermissionRequest request) {
-        boolean fromApp = APP_HOST.equals(request.getOrigin().getHost());
-        boolean wantsCamera = false;
-        for (String resource : request.getResources()) {
-            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
-                wantsCamera = true;
-            }
-        }
-        if (!fromApp || !wantsCamera) {
-            request.deny();
-            return;
-        }
-        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-            return;
-        }
-        pendingCameraRequest = request;
-        requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST);
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != CAMERA_REQUEST || pendingCameraRequest == null) {
-            return;
-        }
-        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-        if (granted) {
-            pendingCameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
-        } else {
-            pendingCameraRequest.deny();
-        }
-        pendingCameraRequest = null;
-    }
-
     @SuppressWarnings("deprecation")
     private void enterImmersiveMode() {
         getWindow().getDecorView().setSystemUiVisibility(
@@ -175,7 +118,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Back never closes the booth app; it returns to the games menu instead. */
+    /** Back never closes the app; it returns to the start screen instead. */
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
@@ -205,52 +148,6 @@ public class MainActivity extends Activity {
             }
             int duration = Math.max(1, Math.min(milliseconds, 500));
             vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
-        }
-
-        @JavascriptInterface
-        public void shareText(String text) {
-            Intent send = new Intent(Intent.ACTION_SEND);
-            send.setType("text/plain");
-            send.putExtra(Intent.EXTRA_TEXT, text);
-            startActivity(Intent.createChooser(send, getString(R.string.share_title)));
-        }
-
-        /** Saves a "data:image/jpeg;base64,…" picture to the device gallery (Pictures/Zanis). */
-        @JavascriptInterface
-        public void saveImage(String dataUrl) {
-            boolean saved = false;
-            try {
-                byte[] bytes = Base64.decode(dataUrl.substring(dataUrl.indexOf(',') + 1), Base64.DEFAULT);
-                String name = "zanis-" + System.currentTimeMillis() + ".jpg";
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    ContentValues values = new ContentValues();
-                    values.put(MediaStore.Images.Media.DISPLAY_NAME, name);
-                    values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-                    values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Zanis");
-                    Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-                    if (uri != null) {
-                        try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                            if (out != null) {
-                                out.write(bytes);
-                                saved = true;
-                            }
-                        }
-                    }
-                } else {
-                    // Android 8–9: app-private pictures folder (no storage permission needed).
-                    File folder = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-                    if (folder != null) {
-                        try (OutputStream out = new FileOutputStream(new File(folder, name))) {
-                            out.write(bytes);
-                            saved = true;
-                        }
-                    }
-                }
-            } catch (Exception error) {
-                saved = false;
-            }
-            final int message = saved ? R.string.photo_saved : R.string.photo_failed;
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
         }
     }
 }

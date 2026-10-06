@@ -94,8 +94,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v${VERSION_NAME}" "$APK" \
-            --title "بازی‌های زانیس ${VERSION_NAME}" \
-            --notes "ساخت خودکار از کامیت ${GITHUB_SHA::7}. فایل APK را روی تبلت یا گوشی اندروید ۸ به بالا نصب کنید." \
+            --title "چراغ‌های زانیس ${VERSION_NAME}" \
+            --notes "ساخت خودکار از کامیت ${GITHUB_SHA::7}. APK نسخهٔ تمرینی برای اندروید ۸ به بالا است؛ فایل exe مسابقهٔ اصلی برای ویندوز است. تنظیمات هر دو از https://zgp.game.aliizz.ir می‌آید." \
             --latest
 
   smoke:
@@ -127,14 +127,14 @@ jobs:
             adb shell am start -W -n ir.zanis.games/.MainActivity
             adb shell pidof ir.zanis.games
             for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do adb logcat -d -s ZanisGames | grep -q "zanis-games ready" && break; sleep 4; done
-            for attempt in 1 2 3 4 5; do adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1; grep -q "بازی کن" ui.xml && break; sleep 4; done
+            for attempt in 1 2 3 4 5; do adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1; grep -q "شروع تمرین" ui.xml && break; sleep 4; done
             adb exec-out screencap -p > first-screen.png
             adb logcat -d > logcat.txt
             grep -E "ZanisGames" logcat.txt | tail -40 || true
             if grep -q "FATAL EXCEPTION" logcat.txt; then echo "app crashed"; grep -A 20 "FATAL EXCEPTION" logcat.txt; exit 1; fi
             if grep -E "ZanisGames: (console error|load failed)" logcat.txt; then echo "the page reported an error"; exit 1; fi
             grep -q "zanis-games ready" logcat.txt || { echo "the web app never reported ready"; exit 1; }
-            grep -q "بازی کن" ui.xml || echo "::warning::the app is ready but the sign-in text is not in the UI dump (the headless emulator sometimes does not draw the WebView)"
+            grep -q "شروع تمرین" ui.xml || echo "::warning::the app is ready but the start button is not in the UI dump (the headless emulator sometimes does not draw the WebView)"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

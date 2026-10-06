@@ -68,39 +68,7 @@ export function shuffle(list) {
   return copy;
 }
 
-export const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-
-/** Sizes a canvas for the device pixel ratio and returns its 2D context in CSS pixels. */
-export function setupCanvas(canvas, width, height) {
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = width * ratio;
-  canvas.height = height * ratio;
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  const context = canvas.getContext('2d');
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  return context;
-}
-
-const imageCache = new Map();
-
-/** Loads an image once and resolves with the decoded element (cached per URL). */
-export function loadImage(source) {
-  if (!imageCache.has(source)) {
-    imageCache.set(
-      source,
-      new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error(`cannot load ${source}`));
-        image.src = source;
-      }),
-    );
-  }
-  return imageCache.get(source);
-}
-
-/** Bridge to the Android host (see MainActivity.Bridge). All calls are optional no-ops in a browser. */
+/** Bridge to the Android host (MainActivity.Bridge) or the Windows one (desktop/preload.js); no-ops in a browser. */
 export const host = {
   vibrate(ms = 20) {
     if (window.Android?.vibrate) window.Android.vibrate(ms);
@@ -110,11 +78,5 @@ export const host = {
     if (window.Android?.shareText) return window.Android.shareText(text);
     if (navigator.share) return navigator.share({ text }).catch(() => {});
     return navigator.clipboard?.writeText(text).then(() => toast('کپی شد'));
-  },
-  saveImage(dataUrl) {
-    if (window.Android?.saveImage) return window.Android.saveImage(dataUrl);
-    const link = h('a', { href: dataUrl, download: `zanis-${Date.now()}.jpg` });
-    link.click();
-    return undefined;
   },
 };

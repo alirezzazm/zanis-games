@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- INTERNET: the practice app downloads the current game settings from the game server. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
-
-    <!-- allowBackup is off: the visitor list (names and phone numbers) must not leave the device through cloud backup. -->
+    <!-- allowBackup is off: the app keeps nothing worth restoring, and the booth PIN stays on the device. -->
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

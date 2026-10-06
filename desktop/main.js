@@ -1,6 +1,6 @@
-// Windows host for the booth games: a full-screen window showing the same web app as the Android
-// build. The app is served from a private "app://" origin, because ES modules and the camera
-// (getUserMedia) need a real, secure origin; file:// pages get neither.
+// Windows host for the lights game tournament: a full-screen window showing the same web app as the
+// Android practice build, in kiosk mode (preload.js tells the page). The app is served from a private
+// "app://" origin, because ES modules need a real origin and file:// pages are not one.
 
 const { app, BrowserWindow, clipboard, ipcMain, net, protocol, session, shell } = require('electron');
 const fs = require('node:fs');
@@ -29,12 +29,12 @@ function resolveAsset(requestUrl) {
 
 function createWindow() {
   const window = new BrowserWindow({
-    width: 480,
-    height: 900,
+    width: 1280,
+    height: 760,
     fullscreen: !WINDOWED,
     autoHideMenuBar: true,
     backgroundColor: '#0b1020',
-    title: 'بازی‌های زانیس',
+    title: 'مسابقهٔ چراغ‌های زانیس',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -44,7 +44,7 @@ function createWindow() {
   });
   window.removeMenu();
 
-  // The games are fully offline: never leave the bundled pages or open new windows.
+  // Never leave the bundled pages or open new windows (the game server is only called with fetch).
   window.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith(APP_ORIGIN)) event.preventDefault();
   });
@@ -88,14 +88,9 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(file).toString());
   });
 
-  // Only the camera is ever granted, and only to the bundled app (photo frame, QR scan).
-  const fromApp = (url) => typeof url === 'string' && url.startsWith(APP_ORIGIN);
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(permission === 'media' && fromApp(webContents.getURL()));
-  });
-  session.defaultSession.setPermissionCheckHandler(
-    (webContents, permission, origin) => permission === 'media' && fromApp(origin),
-  );
+  // The game needs no camera, microphone, location or notifications.
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
 
   createWindow();
 });
@@ -104,25 +99,15 @@ app.on('window-all-closed', () => app.quit());
 
 // ---------------------------------------------------------------- bridge (see preload.js)
 
-/** Saves a "data:image/jpeg;base64,…" photo to Pictures\Zanis and shows it in Explorer. */
-ipcMain.handle('save-image', (_event, dataUrl) => {
-  const folder = path.join(app.getPath('pictures'), 'Zanis');
-  fs.mkdirSync(folder, { recursive: true });
-  const file = path.join(folder, `zanis-${Date.now()}.jpg`);
-  fs.writeFileSync(file, Buffer.from(String(dataUrl).slice(String(dataUrl).indexOf(',') + 1), 'base64'));
-  shell.showItemInFolder(file);
-  return file;
-});
-
 /**
- * "Share" on a PC: the text (the visitor list as CSV) is written to Documents\Zanis, shown in
+ * "Share" on a PC: the text (the rounds of this computer as CSV) is written to Documents\Zanis, shown in
  * Explorer and also copied to the clipboard. The UTF-8 BOM lets Excel open Persian names correctly.
  */
 ipcMain.handle('share-text', (_event, text) => {
   const folder = path.join(app.getPath('documents'), 'Zanis');
   fs.mkdirSync(folder, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-  const file = path.join(folder, `zanis-visitors-${stamp}.csv`);
+  const file = path.join(folder, `zanis-scores-${stamp}.csv`);
   fs.writeFileSync(file, `﻿${text}`, 'utf8');
   clipboard.writeText(String(text));
   shell.showItemInFolder(file);

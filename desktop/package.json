@@ -2,7 +2,7 @@
   "name": "zanis-games-desktop",
   "productName": "Zanis Games",
   "version": "1.0.0",
-  "description": "Zanis booth games for Windows (the same web app as the Android build)",
+  "description": "Zanis lights game tournament for Windows (the same web app as the Android practice build)",
   "author": "alirezzazm",
   "private": true,
   "main": "main.js",
