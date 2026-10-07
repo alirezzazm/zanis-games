@@ -3,11 +3,12 @@
 // enforced by the server (server/src/Zanis.Games.Api/Game/GameSettings.cs): keep both in step.
 //
 // A round has two levels: "normal" from the start, and "hard" from hardFromSecond on. The game
-// changes level once, at exactly that second; within a level the pace stays the same.
+// changes level once, at exactly that second, without any message; within a level the pace stays
+// the same. The grid of products (columns x rows) is set separately for Windows and Android.
 
 export const DEFAULT_SETTINGS = Object.freeze({
   roundSeconds: 30,
-  lampCount: 12,
+  grids: { windows: { columns: 5, rows: 5 }, android: { columns: 3, rows: 4 } },
   hardFromSecond: 15,
   // visibleMs: how long a wave of lamps stays lit; yellow: yellow lamps per wave; red: the most red
   // (wrong) lamps lit with them; redChance: chance (percent) of each of those red lamps appearing.
@@ -27,7 +28,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 export const LIMITS = Object.freeze({
   roundSeconds: [10, 300],
-  lampCount: [4, 24],
+  gridSide: [2, 6],
   visibleMs: [150, 5000],
   gapMs: [0, 2000],
   pointsYellow: [0, 100],
@@ -55,19 +56,37 @@ function normalizeLevel(raw, fallback, lampCount) {
   };
 }
 
+function normalizeGrid(raw, fallback) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    columns: int(source.columns, LIMITS.gridSide, fallback.columns),
+    rows: int(source.rows, LIMITS.gridSide, fallback.rows),
+  };
+}
+
 /**
- * Returns complete, in-range settings from whatever was stored or downloaded. The server already
- * validates them; this only protects the game from a damaged cache or an older server.
+ * Returns complete, in-range settings from whatever was stored or downloaded, for one platform
+ * ('windows' or 'android'): columns, rows and lampCount are that platform's grid. The server already
+ * validates the settings; this only protects the game from a damaged cache or an older server.
  */
-export function normalizeSettings(raw) {
+export function normalizeSettings(raw, platform = 'android') {
   const source = raw && typeof raw === 'object' ? raw : {};
   const d = DEFAULT_SETTINGS;
   const roundSeconds = int(source.roundSeconds, LIMITS.roundSeconds, d.roundSeconds);
-  const lampCount = int(source.lampCount, LIMITS.lampCount, d.lampCount);
+  const sourceGrids = source.grids && typeof source.grids === 'object' ? source.grids : {};
+  const grids = {
+    windows: normalizeGrid(sourceGrids.windows, d.grids.windows),
+    android: normalizeGrid(sourceGrids.android, d.grids.android),
+  };
+  const grid = platform === 'windows' ? grids.windows : grids.android;
+  const lampCount = grid.columns * grid.rows;
   const points = source.points && typeof source.points === 'object' ? source.points : {};
 
   return {
     roundSeconds,
+    grids,
+    columns: grid.columns,
+    rows: grid.rows,
     lampCount,
     hardFromSecond: int(source.hardFromSecond, [0, roundSeconds - 1], Math.min(d.hardFromSecond, roundSeconds - 1)),
     normal: normalizeLevel(source.normal, d.normal, lampCount),

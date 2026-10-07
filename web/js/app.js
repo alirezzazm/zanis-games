@@ -15,6 +15,8 @@ import { DEFAULT_SERVER_URL, KIOSK_RESULT_SECONDS } from './data/config.js';
 import { playRound } from './game/lights.js';
 
 const KIOSK = Boolean(window.ZanisDesktop) || new URLSearchParams(location.search).get('mode') === 'kiosk';
+// The grid size (columns x rows) is set per platform in the dashboard.
+const PLATFORM = KIOSK ? 'windows' : 'android';
 const OPERATOR_HOLD_MS = 1500;
 const SYNC_EVERY_MS = 30_000;
 const TICKER_EVERY_MS = 20_000;
@@ -79,7 +81,7 @@ function rulesCard(settings) {
 
 // ---------------------------------------------------------------- practice (Android)
 function practiceHome() {
-  const settings = currentSettings();
+  const settings = currentSettings(PLATFORM);
   root.append(
     h('div.stack', { style: { flex: '1', justifyContent: 'center' } },
       brandHeader(),
@@ -103,7 +105,7 @@ async function refreshAndRedraw() {
 
 // ---------------------------------------------------------------- tournament sign-in (Windows)
 function signInScreen() {
-  const settings = currentSettings();
+  const settings = currentSettings(PLATFORM);
   const name = h('input', { autocomplete: 'off', maxLength: 40, placeholder: 'مثلاً علی رضایی', id: 'signin-name' });
   const phone = h('input', { inputMode: 'tel', autocomplete: 'off', maxLength: 13, placeholder: '۰۹۱۲۱۲۳۴۵۶۷', id: 'signin-phone' });
   const nameError = h('div.error');
@@ -119,7 +121,7 @@ function signInScreen() {
       sfx.bad();
       return;
     }
-    const limit = currentSettings().maxPlaysPerPhone;
+    const limit = currentSettings(PLATFORM).maxPlaysPerPhone;
     if (limit) {
       submitButton.disabled = true;
       const remotePlays = await playsOnServer(cleanPhone);
@@ -157,7 +159,7 @@ function signInScreen() {
 
 // ---------------------------------------------------------------- the round
 function gameScreen() {
-  const settings = currentSettings();
+  const settings = currentSettings(PLATFORM);
   const settingsVersion = store.remote?.version ?? 0;
   const player = KIOSK ? store.player : null;
   const hud = h('div.hud');
@@ -381,7 +383,7 @@ if (KIOSK) {
   document.body.append(bar.element);
   ticker = {
     async refresh() {
-      bar.update(await fetchTicker(), currentSettings().tickerTopToday);
+      bar.update(await fetchTicker(), currentSettings(PLATFORM).tickerTopToday);
     },
   };
   ticker.refresh();

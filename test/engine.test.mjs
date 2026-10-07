@@ -1,8 +1,9 @@
-// Rules of the lights game: settings limits, the switch to the hard level, wave picking and scoring.
+// Rules of the lights game: settings limits, grids per platform, the switch to the hard level,
+// wave picking and scoring.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../web/js/game/settings.js';
-import { bestColumns, createTally, isHard, levelAt, planWave } from '../web/js/game/engine.js';
+import { createTally, isHard, levelAt, planWave } from '../web/js/game/engine.js';
 
 /** Small deterministic [0, 1) generator. */
 function seeded(seed) {
@@ -14,14 +15,24 @@ function seeded(seed) {
 }
 
 test('defaults survive normalisation unchanged', () => {
-  assert.deepEqual(normalizeSettings(DEFAULT_SETTINGS), JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+  const { columns, rows, lampCount, ...rest } = normalizeSettings(DEFAULT_SETTINGS);
+  assert.deepEqual(rest, JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
   assert.deepEqual(normalizeSettings(null), normalizeSettings(DEFAULT_SETTINGS));
+});
+
+test('each platform plays on its own grid: Windows 5 x 5, Android 3 x 4', () => {
+  const windows = normalizeSettings(DEFAULT_SETTINGS, 'windows');
+  assert.deepEqual([windows.columns, windows.rows, windows.lampCount], [5, 5, 25]);
+  const android = normalizeSettings(DEFAULT_SETTINGS, 'android');
+  assert.deepEqual([android.columns, android.rows, android.lampCount], [3, 4, 12]);
+  const custom = normalizeSettings({ grids: { windows: { columns: 6, rows: 1 } } }, 'windows');
+  assert.deepEqual([custom.columns, custom.rows], [6, 2], 'sides stay between 2 and 6');
 });
 
 test('out-of-range and broken values are clamped or replaced', () => {
   const settings = normalizeSettings({
     roundSeconds: 5,
-    lampCount: 99,
+    grids: { android: { columns: 99, rows: 'x' } },
     hardFromSecond: 50,
     normal: { visibleMs: 20, yellow: 9, red: 9, redChance: 300 },
     hard: 'broken',
@@ -29,7 +40,7 @@ test('out-of-range and broken values are clamped or replaced', () => {
     tickerTopToday: 'yes',
   });
   assert.equal(settings.roundSeconds, 10);
-  assert.equal(settings.lampCount, 24);
+  assert.equal(settings.lampCount, 6 * 4);
   assert.equal(settings.hardFromSecond, 9, 'the switch happens before the round ends');
   assert.deepEqual(settings.normal, { visibleMs: 150, yellow: 6, red: 6, redChance: 100 });
   assert.deepEqual(settings.hard, DEFAULT_SETTINGS.hard);
@@ -38,8 +49,8 @@ test('out-of-range and broken values are clamped or replaced', () => {
 });
 
 test('a wave never asks for more lamps than the grid has', () => {
-  const settings = normalizeSettings({ lampCount: 5, hard: { visibleMs: 500, yellow: 4, red: 6, redChance: 100 } });
-  assert.deepEqual(settings.hard, { visibleMs: 500, yellow: 4, red: 1, redChance: 100 });
+  const settings = normalizeSettings({ grids: { android: { columns: 2, rows: 2 } }, hard: { visibleMs: 500, yellow: 3, red: 6, redChance: 100 } });
+  assert.deepEqual(settings.hard, { visibleMs: 500, yellow: 3, red: 1, redChance: 100 });
 });
 
 test('the round turns hard once, exactly at the chosen second', () => {
@@ -65,7 +76,7 @@ test('a wave lit just before the switch ends at the switch', () => {
 });
 
 test('waves light the level counts on distinct lamps, avoiding the previous wave', () => {
-  const settings = normalizeSettings({ lampCount: 12, hardFromSecond: 0, hard: { visibleMs: 500, yellow: 2, red: 2, redChance: 100 } });
+  const settings = normalizeSettings({ hardFromSecond: 0, hard: { visibleMs: 500, yellow: 2, red: 2, redChance: 100 } });
   const random = seeded(7);
   let previous = [];
   for (let i = 0; i < 200; i++) {
@@ -101,10 +112,4 @@ test('scoring adds the configured points and never goes below zero', () => {
   assert.equal(tally.score, 5);
   tally.add('missed', 2);
   assert.deepEqual(tally.counts, { yellow: 3, red: 1, empty: 1, missed: 2 });
-});
-
-test('the grid shape fits the screen', () => {
-  assert.equal(bestColumns(12, 360, 600), 3, 'portrait phone: 3 x 4');
-  assert.equal(bestColumns(12, 1200, 500), 6, 'wide monitor: 6 x 2');
-  assert.equal(bestColumns(16, 800, 800), 4);
 });

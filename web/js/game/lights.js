@@ -1,11 +1,12 @@
-// One round of the lights game on screen: a grid of Zanis products. A yellow-lit product must be
-// hit; a red one (crossed out) must be left alone. The round starts at the normal level and turns
-// hard once, at the second set in the dashboard (see engine.js); it reports through onFinish.
+// One round of the lights game on screen: a grid of Zanis products (columns x rows from the
+// dashboard). A yellow-lit product must be hit; a red one (crossed out) must be left alone. The
+// round starts at the normal level and quietly turns hard once, at the second set in the dashboard
+// (see engine.js); it reports through onFinish.
 
 import { h, fa, shuffle, host } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { PRODUCTS } from '../data/products.js';
-import { bestColumns, createTally, isHard, planWave } from './engine.js';
+import { createTally, planWave } from './engine.js';
 
 const COUNTDOWN_FROM = 3;
 const GLOW = 14;
@@ -19,7 +20,9 @@ const GLOW = 14;
 export function playRound(stage, { settings, onHud, onFinish }) {
   const tally = createTally(settings);
   const roundMs = settings.roundSeconds * 1000;
-  const products = shuffle(PRODUCTS).slice(0, settings.lampCount);
+  // Each product once; a grid larger than the catalogue starts the shuffled list again.
+  const shuffled = shuffle(PRODUCTS);
+  const products = Array.from({ length: settings.lampCount }, (_, index) => shuffled[index % shuffled.length]);
   const cells = products.map((product, index) =>
     h('button.lamp', {
         type: 'button',
@@ -35,7 +38,6 @@ export function playRound(stage, { settings, onHud, onFinish }) {
   );
   const grid = h('div.lamps', cells);
   const countdown = h('div.countdown');
-  const banner = h('div.level-banner', 'سخت‌تر شد! ⚡');
   stage.append(grid, countdown);
 
   const lit = new Map(); // lamp index -> 'yellow' | 'red'
@@ -46,17 +48,17 @@ export function playRound(stage, { settings, onHud, onFinish }) {
   let clock = 0;
   let countdownTimer = 0;
   let waveEndsAtSwitch = false;
-  let announcedHard = false;
 
-  // Size the grid so the products are as large as the stage allows, in any screen orientation.
+  // The grid has the columns and rows set in the dashboard; the products are as large as the
+  // stage allows.
   function layout() {
     // Leave room for the glow of a lit lamp.
     const width = stage.clientWidth - GLOW * 2;
     const height = stage.clientHeight - GLOW * 2;
     if (!width || !height) return;
-    const columns = bestColumns(cells.length, width, height);
-    const rows = Math.ceil(cells.length / columns);
-    const gap = 12;
+    const { columns, rows } = settings;
+    const gap = columns > 4 || rows > 4 ? 10 : 12;
+    grid.style.gap = `${gap}px`;
     const size = Math.floor(Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) / rows));
     grid.style.gridTemplateColumns = `repeat(${columns}, ${size}px)`;
     grid.style.gridAutoRows = `${size}px`;
@@ -95,11 +97,6 @@ export function playRound(stage, { settings, onHud, onFinish }) {
     darkenAll();
     if (!running) return;
     const now = elapsed();
-    if (!announcedHard && isHard(settings, now)) {
-      announcedHard = true;
-      // From a hard-only round (hardFromSecond 0) there is nothing to announce.
-      if (settings.hardFromSecond > 0) announceHard();
-    }
     const wave = planWave(settings, now, lastWave);
     waveEndsAtSwitch = wave.endsAtSwitch;
     wave.yellow.forEach((index) => setLamp(index, 'yellow'));
@@ -108,21 +105,8 @@ export function playRound(stage, { settings, onHud, onFinish }) {
     clearTimeout(waveTimer);
     waveTimer = setTimeout(expireWave, wave.visibleMs);
   }
-  function announceHard() {
-    stage.append(banner);
-    banner.classList.remove('show');
-    void banner.offsetWidth;
-    banner.classList.add('show');
-    sfx.win();
-    setTimeout(() => banner.remove(), 1400);
-  }
   function expireWave() {
     const missed = waveEndsAtSwitch ? 0 : [...lit.values()].filter((state) => state === 'yellow').length;
-    // The wave was cut at the switch: announce the hard level now, not after the pause.
-    if (waveEndsAtSwitch && !announcedHard) {
-      announcedHard = true;
-      announceHard();
-    }
     if (missed && tally.add('missed', missed) < 0) sfx.bad();
     darkenAll();
     updateHud();

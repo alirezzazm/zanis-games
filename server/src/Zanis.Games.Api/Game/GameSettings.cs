@@ -2,13 +2,14 @@ namespace Zanis.Games.Api.Game;
 
 /// <summary>
 /// Settings of the lights game, edited in the dashboard and downloaded by the apps. A round starts
-/// at the <see cref="Normal"/> level and turns <see cref="Hard"/> once, at <see cref="HardFromSecond"/>.
+/// at the <see cref="Normal"/> level and turns <see cref="Hard"/> once, at <see cref="HardFromSecond"/>,
+/// without any message. Each platform has its own grid of products (<see cref="Grids"/>).
 /// The defaults and limits match web/js/game/settings.js; change both together.
 /// </summary>
 public sealed record GameSettings
 {
     public int RoundSeconds { get; init; } = 30;
-    public int LampCount { get; init; } = 12;
+    public GridSet? Grids { get; init; } = new();
 
     /// <summary>The second at which the round switches to the hard level (0 = hard from the start).</summary>
     public int HardFromSecond { get; init; } = 15;
@@ -46,7 +47,11 @@ public sealed record GameSettings
         }
 
         Range("roundSeconds", RoundSeconds, 10, 300, "زمان بازی (ثانیه)");
-        Range("lampCount", LampCount, 4, 24, "تعداد چراغ‌ها");
+        ValidateGrid("grids.windows", Grids?.Windows, "جدول ویندوز");
+        ValidateGrid("grids.android", Grids?.Android, "جدول اندروید");
+
+        // A wave must fit the smaller of the two grids.
+        var lampCount = Math.Min(Lamps(Grids?.Windows), Lamps(Grids?.Android));
         Range("hardFromSecond", HardFromSecond, 0, 299, "ثانیهٔ سخت شدن");
         if (!errors.ContainsKey("hardFromSecond") && !errors.ContainsKey("roundSeconds") && HardFromSecond >= RoundSeconds)
         {
@@ -86,12 +91,40 @@ public sealed record GameSettings
             Range($"{path}.yellow", level.Yellow, 1, 6, "تعداد چراغ زرد هم‌زمان");
             Range($"{path}.red", level.Red, 0, 6, "بیشترین چراغ قرمز هم‌زمان");
             Range($"{path}.redChance", level.RedChance, 0, 100, "شانس چراغ قرمز (درصد)");
-            if (!errors.ContainsKey($"{path}.red") && level.Yellow + level.Red > LampCount)
+            if (!errors.ContainsKey($"{path}.red") && lampCount > 0 && level.Yellow + level.Red > lampCount)
             {
-                errors[$"{path}.red"] = "جمع چراغ‌های زرد و قرمز یک موج از تعداد چراغ‌ها بیشتر است.";
+                errors[$"{path}.red"] = $"جمع چراغ‌های زرد و قرمز یک موج از خانه‌های جدول کوچک‌تر ({lampCount}) بیشتر است.";
             }
         }
+
+        void ValidateGrid(string path, GridSettings? grid, string label)
+        {
+            if (grid is null)
+            {
+                errors[path] = $"{label} لازم است.";
+                return;
+            }
+
+            Range($"{path}.columns", grid.Columns, 2, 6, $"ستون‌های {label}");
+            Range($"{path}.rows", grid.Rows, 2, 6, $"ردیف‌های {label}");
+        }
+
+        static int Lamps(GridSettings? grid) => grid is null ? 0 : grid.Columns * grid.Rows;
     }
+}
+
+/// <summary>The products grid of each platform: Windows (the tournament) and Android (practice).</summary>
+public sealed record GridSet
+{
+    public GridSettings? Windows { get; init; } = new() { Columns = 5, Rows = 5 };
+    public GridSettings? Android { get; init; } = new() { Columns = 3, Rows = 4 };
+}
+
+/// <summary>Columns x rows of products; each side between 2 and 6.</summary>
+public sealed record GridSettings
+{
+    public int Columns { get; init; } = 4;
+    public int Rows { get; init; } = 4;
 }
 
 public sealed record PointSettings

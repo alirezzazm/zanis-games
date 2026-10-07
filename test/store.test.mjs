@@ -64,12 +64,13 @@ test('downloaded settings are normalised before use', async () => {
   globalThis.fetch = async () => ({
     ok: true,
     status: 200,
-    json: async () => ({ version: 5, updatedAt: '2026-10-06T10:00:00Z', settings: { roundSeconds: 45, lampCount: 1000 } }),
+    json: async () => ({ version: 5, updatedAt: '2026-10-06T10:00:00Z', settings: { roundSeconds: 45, grids: { windows: { columns: 50, rows: 5 } } } }),
   });
   assert.equal(await sync.refreshSettings(), true);
-  const settings = sync.currentSettings();
+  const settings = sync.currentSettings('windows');
   assert.equal(settings.roundSeconds, 45);
-  assert.equal(settings.lampCount, 24);
+  assert.equal(settings.lampCount, 6 * 5);
+  assert.equal(sync.currentSettings('android').lampCount, 12);
   assert.equal(store.remote.version, 5);
 });
 

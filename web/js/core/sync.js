@@ -58,9 +58,9 @@ async function request(path, { method = 'GET', body, kiosk = false, timeout = TI
   }
 }
 
-/** Settings for the next round: the last ones from the server, or the defaults. */
-export function currentSettings() {
-  return normalizeSettings(store.remote?.settings);
+/** Settings for the next round on this platform: the last ones from the server, or the defaults. */
+export function currentSettings(platform = 'android') {
+  return normalizeSettings(store.remote?.settings, platform);
 }
 
 /** Downloads the settings; true when they were refreshed. */

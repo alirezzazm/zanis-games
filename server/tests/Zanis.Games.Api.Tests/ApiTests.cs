@@ -148,7 +148,7 @@ public sealed class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         {
             RoundSeconds = 20,
             HardFromSecond = 25,
-            LampCount = 4,
+            Grids = new GridSet { Windows = new GridSettings { Columns = 2, Rows = 2 }, Android = new GridSettings { Columns = 3, Rows = 9 } },
             Normal = new LevelSettings { VisibleMs = 50, Yellow = 1, Red = 0, RedChance = 0 },
             Hard = new LevelSettings { VisibleMs = 600, Yellow = 3, Red = 3, RedChance = 50 },
         };
@@ -157,7 +157,8 @@ public sealed class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var errors = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errors");
         Assert.True(errors.TryGetProperty("hardFromSecond", out _));
         Assert.True(errors.TryGetProperty("normal.visibleMs", out _));
-        Assert.True(errors.TryGetProperty("hard.red", out _));
+        Assert.True(errors.TryGetProperty("hard.red", out _), "a wave must fit the 2 x 2 Windows grid");
+        Assert.True(errors.TryGetProperty("grids.android.rows", out _));
     }
 
     [Fact]
@@ -285,6 +286,8 @@ public sealed class FreshServerTests(ApiFactory factory) : IClassFixture<ApiFact
         var settings = body.GetProperty("settings");
         Assert.Equal(30, settings.GetProperty("roundSeconds").GetInt32());
         Assert.Equal(15, settings.GetProperty("hardFromSecond").GetInt32());
+        Assert.Equal(5, settings.GetProperty("grids").GetProperty("windows").GetProperty("columns").GetInt32());
+        Assert.Equal(4, settings.GetProperty("grids").GetProperty("android").GetProperty("rows").GetInt32());
         Assert.Equal(2, settings.GetProperty("hard").GetProperty("yellow").GetInt32());
         Assert.Equal(2, settings.GetProperty("points").GetProperty("yellow").GetInt32());
     }

@@ -298,7 +298,10 @@ async function settingsTab(content) {
   }
 
   const timeline = h('div.timeline');
+  const gridSummary = h('p.muted');
   function drawTimeline() {
+    const { windows, android } = model.grids;
+    gridSummary.textContent = `ویندوز ${fa(windows.columns)}×${fa(windows.rows)} = ${fa(windows.columns * windows.rows)} محصول · اندروید ${fa(android.columns)}×${fa(android.rows)} = ${fa(android.columns * android.rows)} محصول`;
     const total = Math.max(1, model.roundSeconds);
     const switchAt = Math.min(Math.max(0, model.hardFromSecond), total);
     const part = (className, title, level, from, to) =>
@@ -360,11 +363,21 @@ async function settingsTab(content) {
         h('h2', 'زمان'),
         h('div.grid',
           numberField('roundSeconds', 'زمان هر دور (ثانیه)', 'مدت یک دور مسابقه.', { min: 10, max: 300 }),
-          numberField('hardFromSecond', 'از ثانیهٔ چند سخت‌تر شود', 'بازی فقط یک بار، دقیقاً در همین ثانیه، به حالت سخت می‌رود. ۰ یعنی از اول سخت.', { min: 0, max: 299 }),
+          numberField('hardFromSecond', 'از ثانیهٔ چند سخت‌تر شود', 'بازی فقط یک بار، دقیقاً در همین ثانیه و بدون هیچ پیامی، به حالت سخت می‌رود. ۰ یعنی از اول سخت.', { min: 0, max: 299 }),
           numberField('gapMs', 'مکث بین موج‌ها (ثانیه)', 'تاریکی کوتاه بین دو موج.', { min: 0, max: 2000, step: 0.05, scale: 1000 }),
-          numberField('lampCount', 'تعداد چراغ‌ها (محصولات)', 'بین ۴ تا ۲۴.', { min: 4, max: 24 }),
         ),
         timeline,
+      ),
+      h('section.card.stack',
+        h('h2', 'جدول محصولات (چند در چند)'),
+        h('p.muted', 'هر سکو جدول خودش را دارد. هر ضلع بین ۲ تا ۶ خانه است.'),
+        h('div.grid',
+          numberField('grids.windows.columns', 'ویندوز (مسابقه): ستون', '', { min: 2, max: 6 }),
+          numberField('grids.windows.rows', 'ویندوز (مسابقه): ردیف', '', { min: 2, max: 6 }),
+          numberField('grids.android.columns', 'اندروید (تمرین): ستون', '', { min: 2, max: 6 }),
+          numberField('grids.android.rows', 'اندروید (تمرین): ردیف', '', { min: 2, max: 6 }),
+        ),
+        gridSummary,
       ),
       h('div.levels',
         h('section.card.stack',

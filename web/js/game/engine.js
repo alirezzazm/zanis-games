@@ -67,14 +67,3 @@ export function createTally(settings) {
     },
   };
 }
-
-/** Columns for a grid of `count` square cells that makes the cells as big as the box allows. */
-export function bestColumns(count, width, height, gap = 12) {
-  let best = { columns: Math.ceil(Math.sqrt(count)), size: 0 };
-  for (let columns = 1; columns <= count; columns++) {
-    const rows = Math.ceil(count / columns);
-    const size = Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) / rows);
-    if (size > best.size + 0.5) best = { columns, size };
-  }
-  return best.columns;
-}
